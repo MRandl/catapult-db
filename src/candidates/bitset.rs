@@ -1,7 +1,6 @@
 /// A fixed-capacity set of boolean values packed into a contiguous
 /// buffer of bytes.
 ///
-/// `BitSet` stores `capacity` bits in a `Box<[u8]>`.  
 /// Each bit can be individually set or queried.
 ///
 /// # Examples
@@ -21,7 +20,6 @@ pub struct BitSet {
 }
 
 impl BitSet {
-
     /// Constructs a new [`BitSet`] with space for `capacity` bits,
     /// all initialized to zero.
     ///
@@ -34,7 +32,7 @@ impl BitSet {
         let bytes_needed: usize = capacity.div_ceil(8);
         BitSet {
             buffer: vec![0u8; bytes_needed].into_boxed_slice(),
-            capacity: capacity,
+            capacity,
         }
     }
 
