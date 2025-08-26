@@ -1,6 +1,4 @@
-
-
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, binary_heap::Iter};
 
 /// A bounded structure that keeps the *k smallest* elements seen so far,
 /// implemented on top of `std::collections::BinaryHeap` (a max-heap).
@@ -21,7 +19,7 @@ use std::collections::BinaryHeap;
 /// # Example
 /// ```
 /// use catapult::candidates::SmallestK;
-/// 
+///
 /// let mut sk = SmallestK::new(3);
 /// for x in [10, 1, 7, 3, 9, 2] {
 ///     sk.insert(x);
@@ -31,12 +29,11 @@ use std::collections::BinaryHeap;
 /// assert_eq!(sk.peek().copied(), Some(3)); // threshold (max among kept)
 /// ```
 pub struct SmallestK<T> {
-    internal_heap : BinaryHeap<T>,
-    capacity : usize
+    internal_heap: BinaryHeap<T>,
+    capacity: usize,
 }
 
-impl<T : Ord> SmallestK<T> {
-
+impl<T: Ord> SmallestK<T> {
     /// Creates a new `SmallestK` that retains at most `capacity` elements.
     ///
     /// # Panics
@@ -50,11 +47,11 @@ impl<T : Ord> SmallestK<T> {
     /// assert_eq!(sk.capacity(), 4);
     /// assert!(sk.is_empty());
     /// ```
-    pub fn new(capacity : usize) -> Self {
+    pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0);
         SmallestK {
-            internal_heap : BinaryHeap::with_capacity(capacity),
-            capacity
+            internal_heap: BinaryHeap::with_capacity(capacity),
+            capacity,
         }
     }
 
@@ -75,7 +72,7 @@ impl<T : Ord> SmallestK<T> {
     ///
     /// ```
     /// use catapult::candidates::SmallestK;
-    /// 
+    ///
     /// let sk = SmallestK::<i32>::new(8);
     /// assert_eq!(sk.capacity(), 8);
     /// ```
@@ -87,7 +84,7 @@ impl<T : Ord> SmallestK<T> {
     ///
     /// ```
     /// use catapult::candidates::SmallestK;
-    /// 
+    ///
     /// let sk = SmallestK::<i32>::new(3);
     /// assert!(sk.is_empty());
     /// ```
@@ -110,7 +107,7 @@ impl<T : Ord> SmallestK<T> {
     ///
     /// ```
     /// use catapult::candidates::SmallestK;
-    /// 
+    ///
     /// let mut sk = SmallestK::new(3);
     /// for x in [5, 2, 7, 1, 4] { sk.insert(x); }
     /// // Kept: {1,2,4}; threshold is 4
@@ -126,7 +123,7 @@ impl<T : Ord> SmallestK<T> {
     ///
     /// ```
     /// use catapult::candidates::SmallestK;
-    /// 
+    ///
     /// let mut sk = SmallestK::new(2);
     /// sk.insert(10);
     /// sk.insert(3);
@@ -134,7 +131,7 @@ impl<T : Ord> SmallestK<T> {
     /// assert_eq!(sk.len(), 2);
     /// ```
     pub fn insert(&mut self, item: T) {
-        debug_assert!(self.internal_heap.len() <= self.capacity); 
+        debug_assert!(self.internal_heap.len() <= self.capacity);
         // should be impossible to break this, by construction.
 
         if self.internal_heap.len() < self.capacity {
@@ -143,6 +140,10 @@ impl<T : Ord> SmallestK<T> {
             self.internal_heap.pop();
             self.internal_heap.push(item);
         }
+    }
+
+    pub fn iter(&self) -> Iter<'_, T> {
+        self.internal_heap.iter()
     }
 }
 
@@ -169,7 +170,9 @@ mod tests {
     #[test]
     fn threshold_behavior_and_replacement() {
         let mut sk = SmallestK::new(3);
-        for x in [10, 9, 8] { sk.insert(x); }
+        for x in [10, 9, 8] {
+            sk.insert(x);
+        }
         assert_eq!(contents_sorted(&sk), vec![8, 9, 10]);
         assert_eq!(sk.peek(), Some(&10));
 
@@ -185,7 +188,9 @@ mod tests {
     #[test]
     fn rejects_larger_when_full() {
         let mut sk = SmallestK::new(3);
-        for x in [1, 2, 3] { sk.insert(x); }
+        for x in [1, 2, 3] {
+            sk.insert(x);
+        }
         assert_eq!(contents_sorted(&sk), vec![1, 2, 3]);
         sk.insert(10);
         sk.insert(9);
@@ -196,7 +201,9 @@ mod tests {
     #[test]
     fn ties_are_dropped_when_full() {
         let mut sk = SmallestK::new(3);
-        for _ in 0..3 { sk.insert(5); }
+        for _ in 0..3 {
+            sk.insert(5);
+        }
         assert_eq!(sk.len(), 3);
         assert_eq!(contents_sorted(&sk), vec![5, 5, 5]);
 
@@ -208,7 +215,9 @@ mod tests {
     #[test]
     fn growing_until_full_then_enforcing_policy() {
         let mut sk = SmallestK::new(4);
-        for x in [7, 3, 9] { sk.insert(x); }
+        for x in [7, 3, 9] {
+            sk.insert(x);
+        }
         assert_eq!(sk.len(), 3);
         assert_eq!(contents_sorted(&sk), vec![3, 7, 9]);
         sk.insert(1); // now full

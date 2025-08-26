@@ -156,7 +156,6 @@ impl VectorLike for [f32] {
     }
 }
 
-
 // todo at some point convert these tests to quickcheck for better testing range
 #[cfg(test)]
 mod tests {
