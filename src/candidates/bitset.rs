@@ -6,7 +6,7 @@
 /// # Examples
 ///
 /// ```
-/// use catapult::BitSet;
+/// use catapult::candidates::BitSet;
 ///
 /// let mut bs = BitSet::new(10);
 /// assert!(!bs.get_bit(3));
@@ -25,6 +25,8 @@ impl BitSet {
     ///
     /// # Examples
     /// ```
+    /// use catapult::candidates::BitSet;
+    /// 
     /// let bs = BitSet::new(12);
     /// assert!(!bs.get_bit(0));
     /// ```
@@ -44,6 +46,8 @@ impl BitSet {
     ///
     /// # Examples
     /// ```
+    /// use catapult::candidates::BitSet;
+    /// 
     /// let mut bs = BitSet::new(4);
     /// bs.set_bit(2);
     /// assert!(bs.get_bit(2));
@@ -65,6 +69,8 @@ impl BitSet {
     ///
     /// # Examples
     /// ```
+    /// use catapult::candidates::BitSet;
+    /// 
     /// let mut bs = BitSet::new(4);
     /// bs.set_bit(1);
     /// assert!(bs.get_bit(1));

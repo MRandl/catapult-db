@@ -1,10 +1,9 @@
-struct AdjacencyGraph<T> {
-    neighbors: Vec<Vec<usize>>,
-    values : Vec<T>
+use crate::indexing::node::Node;
+
+struct AdjacencyGraph<P> {
+    adjacency: Vec<Node<P>>,
 }
 
-impl<T> AdjacencyGraph<T> {
-    pub fn greedy_search() where {
-        
-    }
+impl<P> AdjacencyGraph<P> {
+    pub fn greedy_search() {}
 }
