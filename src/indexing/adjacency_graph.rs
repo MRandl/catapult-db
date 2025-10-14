@@ -1,13 +1,10 @@
 use crate::{
     candidates::{BitSet, CandidateEntry, SmallestK},
-    indexing::SimilarityHasher,
-    indexing::node::Node,
+    indexing::{engine_starter::EngineStarter, node::Node},
     numerics::VectorLike,
     statistics::Stats,
 };
-use rand::Rng;
 use rand::seq::index::sample;
-use rand_distr::{Distribution, Uniform};
 
 /// In-memory adjacency graph used for approximate nearest-neighbor (ANN) search.
 ///
@@ -22,29 +19,11 @@ use rand_distr::{Distribution, Uniform};
 ///   not-yet-visited candidate until no such candidate remains.
 pub struct AdjacencyGraph {
     adjacency: Vec<Node>,
-    hasher: SimilarityHasher,
+    starter: EngineStarter,
     stats: Stats,
 }
 
 impl AdjacencyGraph {
-    /// Returns the index of the initial entry point for search.
-    ///
-    /// Currently returns `0` (after asserting graph non-emptiness). In the future,
-    /// this can be replaced by an LSH- or centroid-based entry selection.
-    ///
-    /// # Panics
-    /// Panics if the graph is empty.
-    pub fn pick_starting_point(&self, query: &[f32], k: usize) -> Vec<usize> {
-        // will involve lsh at some point
-        assert!(self.adjacency.len() > 0);
-
-        let bits = self.hasher.hash(query);
-
-        let mut rng = rand::rng();
-        let indices = sample(&mut rng, self.adjacency.len(), k);
-        indices.into_vec()
-    }
-
     /// Performs a best-first beam search from a single entry point.
     ///
     /// The method maintains a candidate set of size at most `beam_width`
@@ -79,17 +58,19 @@ impl AdjacencyGraph {
         let mut candidates: SmallestK<CandidateEntry> = SmallestK::new(beam_width);
         let mut visited = BitSet::new(self.adjacency.len());
 
-        // get initial entrypoint and compute its distance to the target
-        let starting_index = self.pick_starting_point(&query);
-        let starting_point = &self.adjacency[starting_index];
-        let starting_score = starting_point.payload.l2_squared(query);
+        let starting_indices = self.starter.select_starting_points(query, k);
+        for starting_index in starting_indices {
+            let starting_point = &self.adjacency[starting_index];
+            let starting_score = starting_point.payload.l2_squared(query);
 
-        candidates.insert(CandidateEntry {
-            distance: starting_score.into(),
-            index: starting_index,
-        });
+            candidates.insert(CandidateEntry {
+                distance: starting_score.into(),
+                index: starting_index,
+            });
+        }
 
-        let mut best_index_in_candidates: Option<usize> = Some(starting_index);
+        let mut best_index_in_candidates: Option<usize> =
+            candidates.iter().min().map(|entry| entry.index);
 
         while let Some(best_candidate_index) = best_index_in_candidates {
             let best_candidate_node = &self.adjacency[best_candidate_index];

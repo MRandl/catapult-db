@@ -60,6 +60,21 @@ impl SimilarityHasher {
             })
             .collect()
     }
+
+    pub fn hash_int(&self, vector: &[f32]) -> u64 {
+        debug_assert!(
+            vector.len() == self.stored_vectors_dim,
+            "input vector has wrong dimension"
+        );
+        debug_assert!(self.projections.len() <= 64);
+
+        let mut projected = 0u64;
+        for plane in self.projections.iter() {
+            projected = projected << 1 | (plane.dot(vector) >= 0.0) as u64;
+        }
+
+        projected
+    }
 }
 
 #[cfg(test)]
