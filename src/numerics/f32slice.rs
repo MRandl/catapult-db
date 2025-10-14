@@ -63,6 +63,20 @@ impl VectorLike for [f32] {
     }
 
     /// # Usage
+    /// Computes the L2 distance between two vectors.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug mode if the two vectors have different lengths
+    /// or have a size that is not a multiple of SIMD_LANECOUNT.
+    /// In release mode, the longest vector and the remainder items
+    /// will be silently truncated.
+    #[inline]
+    fn l2(&self, other: &[f32]) -> f32 {
+        self.l2_squared(other).sqrt()
+    }
+
+    /// # Usage
     /// Computes the **dot product** between two vectors:
     ///
     /// ```text
@@ -95,20 +109,6 @@ impl VectorLike for [f32] {
 
         // horizontal sum across lanes
         accumulated.reduce_sum()
-    }
-
-    /// # Usage
-    /// Computes the L2 distance between two vectors.
-    ///
-    /// # Panics
-    ///
-    /// Panics in debug mode if the two vectors have different lengths
-    /// or have a size that is not a multiple of SIMD_LANECOUNT.
-    /// In release mode, the longest vector and the remainder items
-    /// will be silently truncated.
-    #[inline]
-    fn l2(&self, other: &[f32]) -> f32 {
-        self.l2_squared(other).sqrt()
     }
 
     /// Returns a new vector that is the **L2-normalized** version of `self`.
