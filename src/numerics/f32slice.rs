@@ -14,7 +14,7 @@ type SimdF32 = Simd<f32, SIMD_LANECOUNT>;
 ///
 /// - The slice length should be a multiple of [`SIMD_LANECOUNT`].
 /// - Operations involving two vectors (l2, dot product) require that they have the same length.
-/// - In debug mode, mismatched lengths or non‐multiples will panic via `debug_assert!`.  
+/// - In debug mode, mismatched lengths or non‐multiples will panic via `debug_assert!`.
 /// - In release mode, excess elements are silently ignored.
 ///
 /// This last point is subject to change: whether the safety-vs-perf tradeoff of having these asserts in release
@@ -47,19 +47,19 @@ impl VectorLike for [f32] {
         debug_assert!(self.len() == othr.len());
         debug_assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
 
-        let mut intermediate_sum_x8 = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
+        let mut intermediate_sum_lanes = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
 
-        let self_chunks = self.chunks_exact(SIMD_LANECOUNT);
-        let othr_chunks = othr.chunks_exact(SIMD_LANECOUNT);
+        let self_chunks = self.as_chunks::<SIMD_LANECOUNT>().0.iter();
+        let othr_chunks = othr.as_chunks::<SIMD_LANECOUNT>().0.iter();
 
-        for (slice_self, slice_othr) in self_chunks.zip(othr_chunks) {
-            let f32x8_slf = SimdF32::from_slice(slice_self);
-            let f32x8_oth = SimdF32::from_slice(slice_othr);
-            let diff = f32x8_slf - f32x8_oth;
-            intermediate_sum_x8 += diff * diff;
+        for (&slice_self, &slice_othr) in self_chunks.zip(othr_chunks) {
+            let f32simd_slf = SimdF32::from_array(slice_self);
+            let f32simd_oth = SimdF32::from_array(slice_othr);
+            let diff = f32simd_slf - f32simd_oth;
+            intermediate_sum_lanes += diff * diff;
         }
 
-        intermediate_sum_x8.reduce_sum() // 8-to-1 sum
+        intermediate_sum_lanes.reduce_sum() // 8-to-1 sum
     }
 
     /// # Usage
@@ -69,8 +69,8 @@ impl VectorLike for [f32] {
     ///
     /// Panics in debug mode if the two vectors have different lengths
     /// or have a size that is not a multiple of SIMD_LANECOUNT.
-    /// In release mode, the longest vector and the remainder items
-    /// will be silently truncated.
+    /// In release mode, extra trailing elements are silently ignored.
+
     #[inline]
     fn l2(&self, other: &[f32]) -> f32 {
         self.l2_squared(other).sqrt()
@@ -93,22 +93,19 @@ impl VectorLike for [f32] {
         debug_assert!(self.len() == othr.len());
         debug_assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
 
-        // accumulator vector of zeroes
-        let mut accumulated = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
+        let mut intermediate_sum_lanes = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
 
-        let self_chunks = self.chunks_exact(SIMD_LANECOUNT);
-        let othr_chunks = othr.chunks_exact(SIMD_LANECOUNT);
+        let self_chunks = self.as_chunks::<SIMD_LANECOUNT>().0.into_iter();
+        let othr_chunks = othr.as_chunks::<SIMD_LANECOUNT>().0.into_iter();
 
-        for (slice_self, slice_othr) in self_chunks.zip(othr_chunks) {
-            // load each chunk into a SIMD register
-            let vx = SimdF32::from_slice(slice_self);
-            let vy = SimdF32::from_slice(slice_othr);
-            // multiply-and-accumulate
-            accumulated += vx * vy;
+        for (&slice_self, &slice_othr) in self_chunks.zip(othr_chunks) {
+            let f32simd_slf = SimdF32::from_array(slice_self);
+            let f32simd_oth = SimdF32::from_array(slice_othr);
+            intermediate_sum_lanes += f32simd_slf * f32simd_oth;
         }
 
-        // horizontal sum across lanes
-        accumulated.reduce_sum()
+        // 8-to-1
+        intermediate_sum_lanes.reduce_sum()
     }
 
     /// Returns a new vector that is the **L2-normalized** version of `self`.
@@ -146,10 +143,10 @@ impl VectorLike for [f32] {
 
         let mut out = Vec::with_capacity(self.len());
 
-        for chunk in self.chunks_exact(SIMD_LANECOUNT) {
-            let v = SimdF32::from_slice(chunk);
-            let scaled = v * SimdF32::splat(inv_norm);
-            out.extend_from_slice(&scaled.to_array());
+        for &chunk in self.as_chunks::<SIMD_LANECOUNT>().0.iter() {
+            let simd_chunk = SimdF32::from_array(chunk);
+            let scaled = simd_chunk * SimdF32::splat(inv_norm);
+            out.extend(&scaled.to_array());
         }
 
         out
