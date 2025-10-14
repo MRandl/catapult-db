@@ -4,7 +4,6 @@ use crate::{
     numerics::VectorLike,
     statistics::Stats,
 };
-use rand::seq::index::sample;
 
 /// In-memory adjacency graph used for approximate nearest-neighbor (ANN) search.
 ///
@@ -51,7 +50,7 @@ impl AdjacencyGraph {
         query: &[f32],
         k: usize,
         beam_width: usize,
-    ) -> SmallestK<CandidateEntry> {
+    ) -> Vec<CandidateEntry> {
         assert!(beam_width >= k);
         self.stats.bump_beam_calls();
 
@@ -93,6 +92,8 @@ impl AdjacencyGraph {
                 .map(|e| e.index)
         }
 
-        candidates
+        let mut candidate_vec = candidates.into_iter().collect::<Vec<_>>();
+        candidate_vec.sort();
+        candidate_vec.into_iter().take(k).collect()
     }
 }

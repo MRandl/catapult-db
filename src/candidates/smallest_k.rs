@@ -1,4 +1,7 @@
-use std::collections::{BinaryHeap, binary_heap::Iter};
+use std::collections::{
+    BinaryHeap,
+    binary_heap::{IntoIter, Iter},
+};
 
 /// A bounded structure that keeps the *k smallest* elements seen so far,
 /// implemented on top of `std::collections::BinaryHeap` (a max-heap).
@@ -144,6 +147,10 @@ impl<T: Ord> SmallestK<T> {
 
     pub fn iter(&self) -> Iter<'_, T> {
         self.internal_heap.iter()
+    }
+
+    pub fn into_iter(self) -> IntoIter<T> {
+        self.internal_heap.into_iter()
     }
 }
 
