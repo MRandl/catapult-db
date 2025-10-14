@@ -1,5 +1,3 @@
-use std::path::{Path, PathBuf};
-
 use crate::{
     candidates::{BitSet, CandidateEntry, SmallestK},
     indexing::node::Node,
@@ -18,7 +16,7 @@ use crate::{
 /// - [`beam_search`] implements a *best-first beam search*: it keeps only the
 ///   `beam_width` closest candidates seen so far and repeatedly expands the best
 ///   not-yet-visited candidate until no such candidate remains.
-struct AdjacencyGraph {
+pub struct AdjacencyGraph {
     adjacency: Vec<Node>,
     stats: Stats,
 }
@@ -105,11 +103,5 @@ impl AdjacencyGraph {
         }
 
         candidates
-    }
-}
-
-impl AdjacencyGraph {
-    pub fn load_from_path(_path: PathBuf) -> Result<Self, String> {
-        Err("unimplemented".into())
     }
 }
