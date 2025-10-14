@@ -24,7 +24,6 @@ impl Ord for TotalF32 {
     }
 }
 
-/// Allow implicit promotion from f32 → TotalF32
 impl From<f32> for TotalF32 {
     fn from(x: f32) -> Self {
         TotalF32(x)

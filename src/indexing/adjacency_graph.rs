@@ -1,9 +1,13 @@
 use crate::{
     candidates::{BitSet, CandidateEntry, SmallestK},
+    indexing::SimilarityHasher,
     indexing::node::Node,
-    numerics::f32slice::VectorLike,
+    numerics::VectorLike,
     statistics::Stats,
 };
+use rand::Rng;
+use rand::seq::index::sample;
+use rand_distr::{Distribution, Uniform};
 
 /// In-memory adjacency graph used for approximate nearest-neighbor (ANN) search.
 ///
@@ -18,6 +22,7 @@ use crate::{
 ///   not-yet-visited candidate until no such candidate remains.
 pub struct AdjacencyGraph {
     adjacency: Vec<Node>,
+    hasher: SimilarityHasher,
     stats: Stats,
 }
 
@@ -29,10 +34,15 @@ impl AdjacencyGraph {
     ///
     /// # Panics
     /// Panics if the graph is empty.
-    pub fn pick_starting_point(&self, _query: &[f32]) -> usize {
+    pub fn pick_starting_point(&self, query: &[f32], k: usize) -> Vec<usize> {
         // will involve lsh at some point
         assert!(self.adjacency.len() > 0);
-        0
+
+        let bits = self.hasher.hash(query);
+
+        let mut rng = rand::rng();
+        let indices = sample(&mut rng, self.adjacency.len(), k);
+        indices.into_vec()
     }
 
     /// Performs a best-first beam search from a single entry point.
