@@ -74,6 +74,7 @@ impl AdjacencyGraph {
         while let Some(best_candidate_index) = best_index_in_candidates {
             let best_candidate_node = &self.adjacency[best_candidate_index];
             let best_candidate_neighbors = &best_candidate_node.neighbors;
+            self.stats.add_node_count(best_candidate_neighbors.len());
 
             for &neighbor in best_candidate_neighbors {
                 let neighbor_node = &self.adjacency[neighbor];
