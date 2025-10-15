@@ -120,7 +120,7 @@ impl VectorLike for [f32] {
     ///
     /// # Examples
     /// ```
-    /// # use catapult::numerics::f32slice::{VectorLike, SIMD_LANECOUNT};
+    /// # use catapult::numerics::{VectorLike, SIMD_LANECOUNT};
     /// let v = [1.0f32; SIMD_LANECOUNT];
     /// let n = v.normalized();
     /// let len = n.dot(&n).sqrt();
