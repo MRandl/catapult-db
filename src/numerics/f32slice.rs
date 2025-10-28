@@ -30,13 +30,18 @@ pub trait VectorLike {
 
 impl VectorLike for [f32] {
     /// # Usage
-    /// Computes the **SQUARED** L2 distance between two vectors.
+    /// Computes the **SQUARED** L2 distance between two vectors:
+    ///
+    /// ```text
+    /// L2^2(x, y) = Σ_i (x[i] - y[i]) ** 2
+    /// ```
+    ///
     /// This is typically useful when comparing two distances :
     ///
     /// dist(u,v) < dist(w, x) ⇔ dist(u,v) ** 2 < dist(w,x) ** 2
     ///
     /// We are usually interested in the left side of the equivalence,
-    /// but the right side is cheaper to compute.
+    /// but the right side is slightly cheaper to compute.
     ///
     /// # Panics
     ///
