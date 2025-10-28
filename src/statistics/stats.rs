@@ -33,10 +33,17 @@ impl Stats {
     /// Write all contents of the stats object to stdout. Will dump to the path at some point
     /// when debugging is over
     pub fn dump(&self, path: String) {
+        //TODO
         println!("Dumping to sysout, supposedly at path {}", path);
         println!(
             "beam calls : {}, nodes queried : {}",
             self.beam_calls, self.nodes_queried
         );
+    }
+}
+
+impl Default for Stats {
+    fn default() -> Self {
+        Stats::new()
     }
 }

@@ -70,7 +70,6 @@ impl VectorLike for [f32] {
     /// Panics in debug mode if the two vectors have different lengths
     /// or have a size that is not a multiple of SIMD_LANECOUNT.
     /// In release mode, extra trailing elements are silently ignored.
-
     #[inline]
     fn l2(&self, other: &[f32]) -> f32 {
         self.l2_squared(other).sqrt()
@@ -95,8 +94,8 @@ impl VectorLike for [f32] {
 
         let mut intermediate_sum_lanes = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
 
-        let self_chunks = self.as_chunks::<SIMD_LANECOUNT>().0.into_iter();
-        let othr_chunks = othr.as_chunks::<SIMD_LANECOUNT>().0.into_iter();
+        let self_chunks = self.as_chunks::<SIMD_LANECOUNT>().0.iter();
+        let othr_chunks = othr.as_chunks::<SIMD_LANECOUNT>().0.iter();
 
         for (&slice_self, &slice_othr) in self_chunks.zip(othr_chunks) {
             let f32simd_slf = SimdF32::from_array(slice_self);

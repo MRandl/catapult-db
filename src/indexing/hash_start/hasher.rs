@@ -27,7 +27,7 @@ impl SimilarityHasher {
 
     fn with_rng<R: Rng>(num_hash: usize, stored_vectors_dim: usize, rng: &mut R) -> Self {
         assert!(
-            stored_vectors_dim % SIMD_LANECOUNT == 0,
+            stored_vectors_dim.is_multiple_of(SIMD_LANECOUNT),
             "dim must be multiple of SIMD_LANECOUNT"
         );
 

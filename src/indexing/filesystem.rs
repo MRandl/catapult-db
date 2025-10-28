@@ -37,9 +37,7 @@ impl AdjacencyGraph {
     }
 
     pub fn load_from_path(path: PathBuf) -> Result<Self, String> {
-        let mut binfile = BufReader::new(File::open(path).expect("FNF"))
-            .bytes()
-            .into_iter();
+        let mut binfile = BufReader::new(File::open(path).expect("FNF")).bytes();
 
         let full_size = Self::next_u64(&mut binfile).expect("Misconfigured header");
         let max_degree = Self::next_u32(&mut binfile).expect("Misconfigured header");

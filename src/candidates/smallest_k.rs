@@ -148,8 +148,13 @@ impl<T: Ord> SmallestK<T> {
     pub fn iter(&self) -> Iter<'_, T> {
         self.internal_heap.iter()
     }
+}
 
-    pub fn into_iter(self) -> IntoIter<T> {
+impl<T> IntoIterator for SmallestK<T> {
+    type Item = T;
+    type IntoIter = IntoIter<T>;
+
+    fn into_iter(self) -> IntoIter<T> {
         self.internal_heap.into_iter()
     }
 }

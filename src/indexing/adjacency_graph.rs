@@ -4,7 +4,6 @@ use crate::{
     candidates::{BitSet, CandidateEntry, SmallestK},
     indexing::{engine_starter::EngineStarter, node::Node},
     numerics::VectorLike,
-    statistics::Stats,
 };
 
 /// In-memory adjacency graph used for approximate nearest-neighbor (ANN) search.
@@ -21,7 +20,6 @@ use crate::{
 pub struct AdjacencyGraph {
     adjacency: Vec<Node>,
     starter: EngineStarter,
-    stats: Stats,
 }
 
 impl AdjacencyGraph {
@@ -29,7 +27,6 @@ impl AdjacencyGraph {
         Self {
             adjacency: adj,
             starter: engine,
-            stats: Stats::new(),
         }
     }
 
@@ -55,14 +52,8 @@ impl AdjacencyGraph {
     /// # Panics
     /// - If `beam_width < k`.
     /// - If neighbor indices are out of bounds (violates the graph invariant).
-    pub fn beam_search(
-        &mut self,
-        query: &[f32],
-        k: usize,
-        beam_width: usize,
-    ) -> Vec<CandidateEntry> {
+    pub fn beam_search(&self, query: &[f32], k: usize, beam_width: usize) -> Vec<CandidateEntry> {
         assert!(beam_width >= k);
-        self.stats.bump_beam_calls();
 
         let mut candidates: SmallestK<CandidateEntry> = SmallestK::new(beam_width);
         let mut visited = BitSet::new(self.adjacency.len());
@@ -89,11 +80,7 @@ impl AdjacencyGraph {
             let best_candidate_node = &self.adjacency[best_candidate_index];
 
             let candidate_regular_neighbors = &best_candidate_node.neighbors;
-            let candidate_catapults = &best_candidate_node.catapults;
-
-            // the formatter has spoken, this line shall be crooked
-            self.stats
-                .bump_edges(candidate_regular_neighbors.len() + candidate_catapults.len());
+            let candidate_catapults = &best_candidate_node.catapults.read().unwrap();
 
             for &neighbor in candidate_regular_neighbors
                 .iter()
@@ -124,6 +111,8 @@ impl AdjacencyGraph {
 
         self.adjacency[initial_best_node]
             .catapults
+            .write()
+            .unwrap()
             .push(candidate_vec[0].index);
 
         candidate_vec.into_iter().take(k).collect()
@@ -133,6 +122,7 @@ impl AdjacencyGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::RwLock;
 
     // NOTE: For the tests to compile and run, the following structs MUST be defined in
     // the parent scope or imported:
@@ -148,31 +138,31 @@ mod tests {
             Node {
                 payload: vec![0.0; 8].into_boxed_slice(),
                 neighbors: vec![1],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 1: Pos 10.0, Neighbors: [2]
             Node {
                 payload: vec![10.0; 8].into_boxed_slice(),
                 neighbors: vec![2],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 2: Pos 20.0, Neighbors: [1, 3]
             Node {
                 payload: vec![20.0; 8].into_boxed_slice(),
                 neighbors: vec![1, 3],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 3: Pos 30.0, Neighbors: [4]
             Node {
                 payload: vec![30.0; 8].into_boxed_slice(),
                 neighbors: vec![4],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 4: Pos 40.0, Neighbors: []
             Node {
                 payload: vec![40.0; 8].into_boxed_slice(),
                 neighbors: vec![],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
         ];
         // Start from node 0
@@ -181,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_basic_search_path() {
-        let mut graph = setup_simple_graph();
+        let graph = setup_simple_graph();
         let query = vec![11.0; 8];
         let k = 2;
         let beam_width = 3;
@@ -198,14 +188,12 @@ mod tests {
         assert_eq!(results[1].index, 2);
         assert_eq!(results[1].distance, (648.0).into());
 
-        // Check stats
-        assert_eq!(graph.stats.get_beam_calls(), 1);
         // Expanded: 0 (1 edge) + 1 (1 edge) + 2 (2 edges) + 0 (1 edge) = 5 edges
         assert_eq!(
             graph
                 .adjacency
                 .iter()
-                .map(|n| { n.catapults.len() + n.neighbors.len() })
+                .map(|n| { n.catapults.read().unwrap().len() + n.neighbors.len() })
                 .sum::<usize>(),
             6
         );
@@ -226,23 +214,23 @@ mod tests {
             Node {
                 payload: vec![100.0; 8].into_boxed_slice(),
                 neighbors: vec![2],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 1: Pos 0.0, Dist 1. (BEST of all)
             Node {
                 payload: vec![0.0; 8].into_boxed_slice(),
                 neighbors: vec![0],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 2: Pos 5.0, Dist 36. (Worst starting point)
             Node {
                 payload: vec![5.0; 8].into_boxed_slice(),
                 neighbors: vec![1],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
         ];
         // Start points: 0, 2
-        let mut graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 3, Some(42)));
+        let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 3, Some(42)));
         let query = vec![1.0; 8];
         let k = 2;
         let beam_width = 3;
@@ -264,40 +252,40 @@ mod tests {
             Node {
                 payload: vec![10.0; 8].into_boxed_slice(),
                 neighbors: vec![1, 5],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 1: Pos 8.0, Dist 64. N: [2].
             Node {
                 payload: vec![8.0; 8].into_boxed_slice(),
                 neighbors: vec![2],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 2: Pos 5.0, Dist 25. N: [3].
             Node {
                 payload: vec![5.0; 8].into_boxed_slice(),
                 neighbors: vec![3],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 3: Pos 2.0, Dist 4. N: [4].
             Node {
                 payload: vec![2.0; 8].into_boxed_slice(),
                 neighbors: vec![4],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 4: Pos 1.0, Dist 1. N: []. (The globally BEST node)
             Node {
                 payload: vec![1.0; 8].into_boxed_slice(),
                 neighbors: vec![],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
             // 5: Pos 100.0, Dist 10000. N: []. (A distant dead end)
             Node {
                 payload: vec![100.0; 8].into_boxed_slice(),
                 neighbors: vec![],
-                catapults: vec![],
+                catapults: RwLock::new(vec![]),
             },
         ];
-        let mut graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 5, Some(42)));
+        let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 5, Some(42)));
         let query = vec![0.0; 8];
         let k = 1;
         let beam_width = 2; // Tight beam width forces early pruning
@@ -314,7 +302,7 @@ mod tests {
             graph
                 .adjacency
                 .iter()
-                .map(|n| &n.catapults)
+                .map(|n| n.catapults.read().unwrap())
                 .all(|cats| cats.is_empty() || cats.clone() == vec![4])
         );
     }
