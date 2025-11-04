@@ -5,14 +5,14 @@ run-tests-release:
   script:
     - rustc --version && cargo --version
     - cargo test --release --verbose
-    - cargo valgrind test --release --verbose
+    - cargo valgrind test --profile release_symbols --verbose
 
 run-tests-debug:
   needs: []
   script:
     - rustc --version && cargo --version
     - cargo test --verbose
-    - cargo valgrind test --verbose
+    - cargo valgrind test --profile release_symbols --verbose
 
 clippy:
   needs: []
