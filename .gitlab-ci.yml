@@ -1,0 +1,29 @@
+image: randlflep/rust-ci
+
+run-tests-release:
+  needs: []
+  script:
+    - rustc --version && cargo --version
+    - cargo test --release --verbose
+    - cargo valgrind test --release --verbose
+
+run-tests-debug:
+  needs: []
+  script:
+    - rustc --version && cargo --version
+    - cargo test --verbose
+    - cargo valgrind test --verbose
+
+clippy:
+  needs: []
+  script:
+    - cargo clippy
+    - cd ../bindings
+    - cargo clippy
+
+format-check:
+  needs: []
+  script:
+    - cargo fmt -- --check
+    - cd ../bindings
+    - cargo fmt -- --check
