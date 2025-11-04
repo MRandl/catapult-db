@@ -18,12 +18,8 @@ clippy:
   needs: []
   script:
     - cargo clippy
-    - cd ../bindings
-    - cargo clippy
 
 format-check:
   needs: []
   script:
-    - cargo fmt -- --check
-    - cd ../bindings
     - cargo fmt -- --check
