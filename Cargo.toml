@@ -6,6 +6,11 @@ edition = "2024"
 [lib]
 path = "src/lib.rs"
 
+[[bin]]
+name = "catapult"
+path = "src/main.rs"
+test = false
+
 [profile.release]
 opt-level = 3
 debug = false
@@ -17,6 +22,12 @@ panic = "unwind"
 incremental = false
 codegen-units = 1
 rpath = false
+
+# heavy optimizations but keep the debug symbols. useful for eg flamegraphs.
+[profile.release_symbols]
+inherits = "release"
+debug = true
+strip = false
 
 [dependencies]
 itertools = "0.14.0"

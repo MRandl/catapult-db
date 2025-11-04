@@ -12,15 +12,10 @@ type SimdF32 = Simd<f32, SIMD_LANECOUNT>;
 ///
 /// # Contract
 ///
-/// - The slice length should be a multiple of [`SIMD_LANECOUNT`].
+/// - The slice length must be a multiple of [`SIMD_LANECOUNT`].
 /// - Operations involving two vectors (l2, dot product) require that they have the same length.
-/// - In debug mode, mismatched lengths or non‐multiples will panic via `debug_assert!`.
-/// - In release mode, excess elements are silently ignored.
-///
-/// This last point is subject to change: whether the safety-vs-perf tradeoff of having these asserts in release
-/// mode is debatable. This code gets called a few tens of millions of times per second, which means a long streak of mispredicted asserts
-/// can be noticeably annoying in a time budget of ~50ns/call. I would expect a modern CPU not to be that bad at prediction.
-/// Needs to be benchmarked in practice.
+/// - Mismatched lengths or vectors with SIMD-awkward lengths will panic via `assert!` in both debug and release builds.
+
 pub trait VectorLike {
     fn l2_squared(&self, othr: &Self) -> f32;
     fn l2(&self, othr: &Self) -> f32;
@@ -45,12 +40,12 @@ impl VectorLike for [f32] {
     ///
     /// # Panics
     ///
-    /// Panics in debug mode if the two vectors have different lengths.
-    /// In release mode, the longest vector will be silently truncated.
+    /// Panics if the two vectors have different lengths or if the length
+    /// is not a multiple of [`SIMD_LANECOUNT`].
     #[inline]
     fn l2_squared(&self, othr: &[f32]) -> f32 {
-        debug_assert!(self.len() == othr.len());
-        debug_assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
+        assert!(self.len() == othr.len());
+        assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
 
         let mut intermediate_sum_lanes = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
 
@@ -72,9 +67,8 @@ impl VectorLike for [f32] {
     ///
     /// # Panics
     ///
-    /// Panics in debug mode if the two vectors have different lengths
-    /// or have a size that is not a multiple of SIMD_LANECOUNT.
-    /// In release mode, extra trailing elements are silently ignored.
+    /// Panics if the two vectors have different lengths or if the length
+    /// is not a multiple of [`SIMD_LANECOUNT`].
     #[inline]
     fn l2(&self, other: &[f32]) -> f32 {
         self.l2_squared(other).sqrt()
@@ -89,13 +83,12 @@ impl VectorLike for [f32] {
     ///
     /// # Panics
     ///
-    /// Panics in debug mode if the vectors have different lengths
-    /// or if the length is not a multiple of [`SIMD_LANECOUNT`].
-    /// In release mode, extra trailing elements are silently ignored.
+    /// Panics if the vectors have different lengths or if the length
+    /// is not a multiple of [`SIMD_LANECOUNT`].
     #[inline]
     fn dot(&self, othr: &[f32]) -> f32 {
-        debug_assert!(self.len() == othr.len());
-        debug_assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
+        assert!(self.len() == othr.len());
+        assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
 
         let mut intermediate_sum_lanes = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
 
@@ -132,11 +125,10 @@ impl VectorLike for [f32] {
     /// ```
     /// # Panics
     ///
-    /// Panics in debug mode if the vector has nonstandard length.
-    /// It is silently truncated in release mode.
+    /// Panics if the vector length is not a multiple of [`SIMD_LANECOUNT`].
     #[inline]
     fn normalized(&self) -> Vec<f32> {
-        debug_assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
+        assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
 
         let norm = self.dot(self).sqrt();
         if norm == 0.0 {
@@ -268,32 +260,6 @@ mod tests {
                 assert!(ni == 0.0);
             }
         }
-    }
-
-    #[test]
-    #[cfg(not(debug_assertions))] // only run this test if using 'release' or 'benchmark' profile
-    fn non_multiple_of_lane_count_is_truncated_in_release() {
-        // Length 10; SIMD lanes are 8 → last 2 elements will be ignored by chunks_exact.
-        let x = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 100.0, 200.0];
-        let y = [8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 300.0, 400.0];
-
-        // Scalar over FIRST 8 only (what SIMD will process when debug_asserts are off).
-        let scalar_first8_dot = scalar_dot(&x[..SIMD_LANECOUNT], &y[..SIMD_LANECOUNT]);
-        let scalar_first8_d2 = scalar_l2_sq(&x[..SIMD_LANECOUNT], &y[..SIMD_LANECOUNT]);
-
-        let simd_dot = x.dot(&y);
-        let simd_d2 = x.l2_squared(&y);
-
-        // In debug builds, debug_assert!(len % L == 0) will panic; in release, it truncates.
-        // We assert the truncation behavior for release builds.
-        assert!(
-            approx_eq(simd_dot, scalar_first8_dot, EPS),
-            "dot simd={simd_dot} scalar8={scalar_first8_dot}"
-        );
-        assert!(
-            approx_eq(simd_d2, scalar_first8_d2, EPS),
-            "d2 simd={simd_d2} scalar8={scalar_first8_d2}"
-        );
     }
 
     #[test]
