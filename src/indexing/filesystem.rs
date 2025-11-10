@@ -1,3 +1,5 @@
+use crate::indexing::eviction::neighbors::{EvictionNeighborSet, NeighborSet};
+
 use super::adjacency_graph::AdjacencyGraph;
 use std::{
     fs::File,
@@ -5,7 +7,7 @@ use std::{
     path::PathBuf,
 };
 
-impl AdjacencyGraph {
+impl<T: EvictionNeighborSet> AdjacencyGraph<T> {
     fn next_u32<I>(iter: &mut I) -> Result<u32, String>
     where
         I: Iterator<Item = Result<u8, Error>>,

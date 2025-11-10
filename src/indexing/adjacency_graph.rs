@@ -2,7 +2,11 @@ use itertools::Itertools;
 
 use crate::{
     candidates::{BitSet, CandidateEntry, SmallestK},
-    indexing::{engine_starter::EngineStarter, node::Node},
+    indexing::{
+        engine_starter::EngineStarter,
+        eviction::neighbors::{EvictionNeighborSet, NeighborSet},
+        node::Node,
+    },
     numerics::VectorLike,
 };
 
@@ -17,13 +21,13 @@ use crate::{
 /// - [`beam_search`] implements a *best-first beam search*: it keeps only the
 ///   `beam_width` closest candidates seen so far and repeatedly expands the best
 ///   not-yet-visited candidate until no such candidate remains.
-pub struct AdjacencyGraph {
-    adjacency: Vec<Node>,
+pub struct AdjacencyGraph<T: EvictionNeighborSet> {
+    adjacency: Vec<Node<T>>,
     starter: EngineStarter,
 }
 
-impl AdjacencyGraph {
-    pub fn new(adj: Vec<Node>, engine: EngineStarter) -> Self {
+impl<T: EvictionNeighborSet> AdjacencyGraph<T> {
+    pub fn new(adj: Vec<Node<T>>, engine: EngineStarter) -> Self {
         Self {
             adjacency: adj,
             starter: engine,
@@ -85,8 +89,9 @@ impl AdjacencyGraph {
             let candidate_catapults = &best_candidate_node.catapults.read().unwrap();
 
             for &neighbor in candidate_regular_neighbors
+                .as_slice()
                 .iter()
-                .chain(candidate_catapults.iter())
+                .chain(&candidate_catapults.as_slice())
                 .unique()
             {
                 let neighbor_node = &self.adjacency[neighbor];
@@ -112,7 +117,7 @@ impl AdjacencyGraph {
             .catapults
             .write()
             .unwrap()
-            .push(candidate_vec[0].index);
+            .insert(candidate_vec[0].index);
 
         candidate_vec.into_iter().take(k).collect()
     }
@@ -120,6 +125,8 @@ impl AdjacencyGraph {
 
 #[cfg(test)]
 mod tests {
+    use crate::indexing::eviction::{FixedSet, unbounded_set::UnboundedNeighborSet};
+
     use super::*;
     use std::sync::RwLock;
 
@@ -131,37 +138,37 @@ mod tests {
     // Nodes: 0 (pos 0), 1 (pos 10), 2 (pos 20), 3 (pos 30), 4 (pos 40)
     // Edges: 0 -> 1 -> 2 -> 3 -> 4
     // Query: 11.0
-    fn setup_simple_graph() -> AdjacencyGraph {
+    fn setup_simple_graph() -> AdjacencyGraph<UnboundedNeighborSet> {
         let nodes = vec![
             // 0: Pos 0.0, Neighbors: [1]
             Node {
                 payload: vec![0.0; 8].into_boxed_slice(),
-                neighbors: vec![1],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![1]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 1: Pos 10.0, Neighbors: [2]
             Node {
                 payload: vec![10.0; 8].into_boxed_slice(),
-                neighbors: vec![2],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![2]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 2: Pos 20.0, Neighbors: [1, 3]
             Node {
                 payload: vec![20.0; 8].into_boxed_slice(),
-                neighbors: vec![1, 3],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![1, 3]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 3: Pos 30.0, Neighbors: [4]
             Node {
                 payload: vec![30.0; 8].into_boxed_slice(),
-                neighbors: vec![4],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![4]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 4: Pos 40.0, Neighbors: []
             Node {
                 payload: vec![40.0; 8].into_boxed_slice(),
-                neighbors: vec![],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
         ];
         // Start from node 0
@@ -192,7 +199,9 @@ mod tests {
             graph
                 .adjacency
                 .iter()
-                .map(|n| { n.catapults.read().unwrap().len() + n.neighbors.len() })
+                .map(|n| {
+                    n.catapults.read().unwrap().as_slice().len() + n.neighbors.as_slice().len()
+                })
                 .sum::<usize>(),
             6
         );
@@ -200,7 +209,7 @@ mod tests {
             graph
                 .adjacency
                 .iter()
-                .map(|n| { n.neighbors.len() })
+                .map(|n| { n.neighbors.as_slice().len() })
                 .sum::<usize>(),
             5
         );
@@ -212,20 +221,20 @@ mod tests {
             // 0: Pos 100.0, Dist 10000
             Node {
                 payload: vec![100.0; 8].into_boxed_slice(),
-                neighbors: vec![2],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![2]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 1: Pos 0.0, Dist 1. (BEST of all)
             Node {
                 payload: vec![0.0; 8].into_boxed_slice(),
-                neighbors: vec![0],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![0]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 2: Pos 5.0, Dist 36. (Worst starting point)
             Node {
                 payload: vec![5.0; 8].into_boxed_slice(),
-                neighbors: vec![1],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![1]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
         ];
         // Start points: 0, 2
@@ -251,42 +260,42 @@ mod tests {
     #[test]
     fn test_complex_search_divergence() {
         // Query target: [0.0]
-        let nodes = vec![
+        let nodes: Vec<Node<UnboundedNeighborSet>> = vec![
             // 0: Pos 10.0, Dist 100. N: [1, 5]. (Start point)
             Node {
                 payload: vec![10.0; 8].into_boxed_slice(),
-                neighbors: vec![1, 5],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![1, 5]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 1: Pos 8.0, Dist 64. N: [2].
             Node {
                 payload: vec![8.0; 8].into_boxed_slice(),
-                neighbors: vec![2],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![2]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 2: Pos 5.0, Dist 25. N: [3].
             Node {
                 payload: vec![5.0; 8].into_boxed_slice(),
-                neighbors: vec![3],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![3]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 3: Pos 2.0, Dist 4. N: [4].
             Node {
                 payload: vec![2.0; 8].into_boxed_slice(),
-                neighbors: vec![4],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![4]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 4: Pos 1.0, Dist 1. N: []. (The globally BEST node)
             Node {
                 payload: vec![1.0; 8].into_boxed_slice(),
-                neighbors: vec![],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
             // 5: Pos 100.0, Dist 10000. N: []. (A distant dead end)
             Node {
                 payload: vec![100.0; 8].into_boxed_slice(),
-                neighbors: vec![],
-                catapults: RwLock::new(vec![]),
+                neighbors: FixedSet::new(vec![]),
+                catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
         ];
         let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 5, Some(42)));
@@ -307,7 +316,7 @@ mod tests {
                 .adjacency
                 .iter()
                 .map(|n| n.catapults.read().unwrap())
-                .all(|cats| cats.is_empty() || cats.clone() == vec![4])
+                .all(|cats| cats.as_slice().is_empty() || cats.as_slice() == vec![4])
         );
     }
 }

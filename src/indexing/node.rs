@@ -1,9 +1,9 @@
 use std::sync::RwLock;
 
-use crate::indexing::neighbor_set::NeighborSet;
+use crate::indexing::eviction::{FixedSet, neighbors::EvictionNeighborSet};
 
-pub struct Node {
-    pub neighbors: NeighborSet,
-    pub catapults: RwLock<NeighborSet>,
+pub struct Node<T: EvictionNeighborSet> {
+    pub neighbors: FixedSet,
+    pub catapults: RwLock<T>,
     pub payload: Box<[f32]>,
 }

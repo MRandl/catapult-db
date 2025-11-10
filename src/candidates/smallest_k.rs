@@ -35,7 +35,7 @@ use std::hash::Hash;
 /// assert_eq!(sk.peek().copied(), Some(3)); // threshold (max among kept)
 /// ```
 pub struct SmallestK<T> {
-    members: HashSet<T>,
+    members: HashSet<T>, //could be a btreeset. maybe evaluate the tradeoff at some point.
     capacity: usize,
 }
 
