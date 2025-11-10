@@ -1,13 +1,12 @@
-use std::{
-    collections::{
-        HashSet,
-        hash_set::{IntoIter, Iter},
-    },
-    hash::Hash,
+use std::collections::{
+    HashSet,
+    hash_set::{IntoIter, Iter},
 };
 
+use std::hash::Hash;
+
 /// A bounded structure that keeps the *k smallest* elements seen so far,
-/// implemented on top of `std::collections::BinaryHeap` (a max-heap).
+/// implemented using `std::collections::HashSet`.
 ///
 /// # Semantics
 /// - Let `k = capacity`. While not full, all inserted elements are retained.
@@ -20,7 +19,8 @@ use std::{
 /// `peek()` exposes the *current maximum among the retained elements* (the threshold).
 ///
 /// # Complexity
-/// Memory is `O(k)`. Insertion is `O(log k)` when accepted (eviction + push) and `O(1)` when rejected.
+/// Memory is `O(k)`. Insertion is `O(k)` due to finding the max element, plus `O(1)`
+/// average case for HashSet operations. `peek()` is `O(k)` as it scans for the maximum.
 ///
 /// # Example
 /// ```
@@ -98,10 +98,7 @@ impl<T: Ord + Eq + Hash + Clone> SmallestK<T> {
         self.members.is_empty()
     }
 
-    /// Returns whether the structure reports being “full”.
-    ///
-    /// Note: this queries the underlying heap’s internal storage state relative to the
-    /// configured capacity.
+    /// Returns whether the structure has reached full capacity.
     pub fn is_full(&self) -> bool {
         self.members.len() == self.capacity
     }
