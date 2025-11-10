@@ -58,7 +58,8 @@ impl AdjacencyGraph {
         let mut candidates: SmallestK<CandidateEntry> = SmallestK::new(beam_width);
         let mut visited = BitSet::new(self.adjacency.len());
 
-        let starting_indices = self.starter.select_starting_points(query, k);
+        // find a few starting points for the beam call, using LSH
+        let starting_indices = self.starter.select_starting_points(query, beam_width);
         for starting_index in starting_indices {
             let starting_point = &self.adjacency[starting_index];
             let starting_score = starting_point.payload.l2_squared(query);
@@ -73,7 +74,8 @@ impl AdjacencyGraph {
             .iter()
             .min()
             .map(|entry| entry.index)
-            .expect("Graph is smaller than requested beam size");
+            .expect("Corrupted LSH entries. Please provide a non-degenerate hashing engine, or just use its default constructor.");
+
         let mut best_index_in_candidates: Option<usize> = Some(initial_best_node);
 
         while let Some(best_candidate_index) = best_index_in_candidates {
@@ -87,15 +89,12 @@ impl AdjacencyGraph {
                 .chain(candidate_catapults.iter())
                 .unique()
             {
-                if !visited.get_bit(neighbor) {
-                    // todo patch search here
-                    let neighbor_node = &self.adjacency[neighbor];
-                    let neighbor_distance = neighbor_node.payload.l2_squared(query);
-                    candidates.insert(CandidateEntry {
-                        distance: neighbor_distance.into(),
-                        index: neighbor,
-                    });
-                }
+                let neighbor_node = &self.adjacency[neighbor];
+                let neighbor_distance = neighbor_node.payload.l2_squared(query);
+                candidates.insert(CandidateEntry {
+                    distance: neighbor_distance.into(),
+                    index: neighbor,
+                });
             }
 
             visited.set_bit(best_candidate_index);
@@ -236,6 +235,11 @@ mod tests {
         let beam_width = 3;
 
         let results = graph.beam_search(&query, k, beam_width);
+        println!(
+            "Top K={} results: {:?}",
+            k,
+            results.iter().map(|e| e.index).collect::<Vec<_>>()
+        );
         // Top K=2 results: [1, 2]
         assert_eq!(results.len(), k);
         assert_eq!(results[0].index, 1);

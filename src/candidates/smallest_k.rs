@@ -1,6 +1,9 @@
-use std::collections::{
-    BinaryHeap,
-    binary_heap::{IntoIter, Iter},
+use std::{
+    collections::{
+        HashSet,
+        hash_set::{IntoIter, Iter},
+    },
+    hash::Hash,
 };
 
 /// A bounded structure that keeps the *k smallest* elements seen so far,
@@ -32,11 +35,11 @@ use std::collections::{
 /// assert_eq!(sk.peek().copied(), Some(3)); // threshold (max among kept)
 /// ```
 pub struct SmallestK<T> {
-    internal_heap: BinaryHeap<T>,
+    members: HashSet<T>,
     capacity: usize,
 }
 
-impl<T: Ord> SmallestK<T> {
+impl<T: Ord + Eq + Hash + Clone> SmallestK<T> {
     /// Creates a new `SmallestK` that retains at most `capacity` elements.
     ///
     /// # Panics
@@ -53,7 +56,7 @@ impl<T: Ord> SmallestK<T> {
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0);
         SmallestK {
-            internal_heap: BinaryHeap::with_capacity(capacity),
+            members: HashSet::with_capacity(capacity),
             capacity,
         }
     }
@@ -68,7 +71,7 @@ impl<T: Ord> SmallestK<T> {
     /// assert_eq!(sk.len(), 1);
     /// ```
     pub fn len(&self) -> usize {
-        self.internal_heap.len()
+        self.members.len()
     }
 
     /// Returns the configured maximum capacity (k).
@@ -92,7 +95,7 @@ impl<T: Ord> SmallestK<T> {
     /// assert!(sk.is_empty());
     /// ```
     pub fn is_empty(&self) -> bool {
-        self.internal_heap.is_empty()
+        self.members.is_empty()
     }
 
     /// Returns whether the structure reports being “full”.
@@ -100,7 +103,7 @@ impl<T: Ord> SmallestK<T> {
     /// Note: this queries the underlying heap’s internal storage state relative to the
     /// configured capacity.
     pub fn is_full(&self) -> bool {
-        self.internal_heap.capacity() == self.capacity
+        self.members.len() == self.capacity
     }
 
     /// Returns a reference to the **largest** element among the retained ones,
@@ -117,7 +120,7 @@ impl<T: Ord> SmallestK<T> {
     /// assert_eq!(sk.peek().copied(), Some(4));
     /// ```
     pub fn peek(&self) -> Option<&T> {
-        self.internal_heap.peek()
+        self.members.iter().max()
     }
 
     /// Inserts `item`, possibly evicting the current threshold if `item` is strictly smaller.
@@ -134,19 +137,26 @@ impl<T: Ord> SmallestK<T> {
     /// assert_eq!(sk.len(), 2);
     /// ```
     pub fn insert(&mut self, item: T) {
-        debug_assert!(self.internal_heap.len() <= self.capacity);
+        debug_assert!(self.members.len() <= self.capacity);
         // should be impossible to break this, by construction.
 
-        if self.internal_heap.len() < self.capacity {
-            self.internal_heap.push(item);
-        } else if &item < self.internal_heap.peek().unwrap() {
-            self.internal_heap.pop();
-            self.internal_heap.push(item);
+        if self.members.len() < self.capacity {
+            self.members.insert(item);
+        } else {
+            let bound = self
+                .peek()
+                .expect("set is full yet has no elements")
+                .clone();
+
+            if item < bound {
+                self.members.remove(&bound);
+                self.members.insert(item);
+            }
         }
     }
 
     pub fn iter(&self) -> Iter<'_, T> {
-        self.internal_heap.iter()
+        self.members.iter()
     }
 }
 
@@ -155,7 +165,7 @@ impl<T> IntoIterator for SmallestK<T> {
     type IntoIter = IntoIter<T>;
 
     fn into_iter(self) -> IntoIter<T> {
-        self.internal_heap.into_iter()
+        self.members.into_iter()
     }
 }
 
@@ -165,7 +175,9 @@ mod tests {
 
     fn contents_sorted<T: Ord + Clone>(sk: &SmallestK<T>) -> Vec<T> {
         // Access via clone; sorts ascending.
-        sk.internal_heap.clone().into_sorted_vec()
+        let mut ret = sk.members.iter().cloned().collect::<Vec<_>>();
+        ret.sort();
+        ret
     }
 
     #[test]
@@ -208,20 +220,6 @@ mod tests {
         sk.insert(9);
         assert_eq!(contents_sorted(&sk), vec![1, 2, 3]); // unchanged
         assert_eq!(sk.peek(), Some(&3));
-    }
-
-    #[test]
-    fn ties_are_dropped_when_full() {
-        let mut sk = SmallestK::new(3);
-        for _ in 0..3 {
-            sk.insert(5);
-        }
-        assert_eq!(sk.len(), 3);
-        assert_eq!(contents_sorted(&sk), vec![5, 5, 5]);
-
-        sk.insert(5); // equal to threshold -> dropped
-        assert_eq!(sk.len(), 3);
-        assert_eq!(contents_sorted(&sk), vec![5, 5, 5]);
     }
 
     #[test]

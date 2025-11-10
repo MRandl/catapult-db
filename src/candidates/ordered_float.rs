@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, hash::Hash, hash::Hasher};
 
 #[derive(Debug, Copy, Clone)]
 #[repr(transparent)]
@@ -27,5 +27,11 @@ impl Ord for TotalF32 {
 impl From<f32> for TotalF32 {
     fn from(x: f32) -> Self {
         TotalF32(x)
+    }
+}
+
+impl Hash for TotalF32 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
     }
 }
