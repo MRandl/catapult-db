@@ -1,6 +1,7 @@
 pub mod unbounded_set;
 
-pub mod fifo_set;
+mod fifo_set;
+pub use fifo_set::*;
 
 mod fixed_set;
 pub use fixed_set::*;

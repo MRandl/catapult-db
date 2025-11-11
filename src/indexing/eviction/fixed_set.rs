@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct FixedSet {
     neighbors: Vec<usize>,
 }

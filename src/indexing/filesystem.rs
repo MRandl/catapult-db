@@ -57,12 +57,12 @@ impl<T: EvictionNeighborSet> AdjacencyGraph<T> {
 
         let mut adjacency = Vec::new();
 
-        while let Ok(pointsize) = Self::next_u64(&mut binfile) {
+        while let Ok(pointsize) = Self::next_u32(&mut binfile) {
             let mut neighs = vec![];
 
             for _ in 0..pointsize {
                 neighs.push(
-                    Self::next_u64(&mut binfile)
+                    Self::next_u32(&mut binfile)
                         .expect("Graph file declared more nodes than actually found")
                         as usize,
                 );

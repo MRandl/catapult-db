@@ -1,5 +1,5 @@
 pub mod adjacency_graph;
-mod eviction;
+pub mod eviction;
 mod filesystem;
 mod hash_start;
 pub mod node;

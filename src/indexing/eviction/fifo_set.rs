@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use crate::indexing::eviction::neighbor_set::EvictionNeighborSet;
 
+#[derive(Debug)]
 pub struct FifoSet<const CAPACITY: usize> {
     queue: VecDeque<usize>,
 }
