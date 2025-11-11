@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::indexing::eviction::neighbor_set::{EvictionNeighborSet, NeighborSet};
+use crate::indexing::eviction::neighbor_set::EvictionNeighborSet;
 
 pub struct FifoSet<const CAPACITY: usize> {
     queue: VecDeque<usize>,
@@ -15,13 +15,11 @@ impl<const CAPACITY: usize> FifoSet<CAPACITY> {
     }
 }
 
-impl<const CAPACITY: usize> NeighborSet for FifoSet<CAPACITY> {
-    fn as_slice(&self) -> Vec<usize> {
+impl<const CAPACITY: usize> EvictionNeighborSet for FifoSet<CAPACITY> {
+    fn to_vec(&self) -> Vec<usize> {
         self.queue.iter().copied().collect::<Vec<_>>()
     }
-}
 
-impl<const CAPACITY: usize> EvictionNeighborSet for FifoSet<CAPACITY> {
     fn insert(&mut self, key: usize) {
         if self.queue.len() == CAPACITY {
             self.queue.pop_front();

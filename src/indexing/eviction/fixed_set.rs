@@ -1,5 +1,3 @@
-use crate::indexing::eviction::neighbor_set::NeighborSet;
-
 pub struct FixedSet {
     neighbors: Vec<usize>,
 }
@@ -10,10 +8,8 @@ impl FixedSet {
             neighbors: initial_values,
         }
     }
-}
 
-impl NeighborSet for FixedSet {
-    fn as_slice(&self) -> Vec<usize> {
+    pub fn to_vec(&self) -> Vec<usize> {
         self.neighbors.clone()
     }
 }

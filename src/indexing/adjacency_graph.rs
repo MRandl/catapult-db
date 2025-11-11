@@ -3,9 +3,7 @@ use itertools::Itertools;
 use crate::{
     candidates::{BitSet, CandidateEntry, SmallestK},
     indexing::{
-        engine_starter::EngineStarter,
-        eviction::neighbor_set::{EvictionNeighborSet, NeighborSet},
-        node::Node,
+        engine_starter::EngineStarter, eviction::neighbor_set::EvictionNeighborSet, node::Node,
     },
     numerics::VectorLike,
 };
@@ -89,9 +87,9 @@ impl<T: EvictionNeighborSet> AdjacencyGraph<T> {
             let candidate_catapults = &best_candidate_node.catapults.read().unwrap();
 
             for &neighbor in candidate_regular_neighbors
-                .as_slice()
+                .to_vec()
                 .iter()
-                .chain(&candidate_catapults.as_slice())
+                .chain(&candidate_catapults.to_vec())
                 .unique()
             {
                 let neighbor_node = &self.adjacency[neighbor];
@@ -200,7 +198,7 @@ mod tests {
                 .adjacency
                 .iter()
                 .map(|n| {
-                    n.catapults.read().unwrap().as_slice().len() + n.neighbors.as_slice().len()
+                    n.catapults.read().unwrap().to_vec().len() + n.neighbors.to_vec().len()
                 })
                 .sum::<usize>(),
             6
@@ -209,7 +207,7 @@ mod tests {
             graph
                 .adjacency
                 .iter()
-                .map(|n| { n.neighbors.as_slice().len() })
+                .map(|n| { n.neighbors.to_vec().len() })
                 .sum::<usize>(),
             5
         );
@@ -316,7 +314,7 @@ mod tests {
                 .adjacency
                 .iter()
                 .map(|n| n.catapults.read().unwrap())
-                .all(|cats| cats.as_slice().is_empty() || cats.as_slice() == vec![4])
+                .all(|cats| cats.to_vec().is_empty() || cats.to_vec() == vec![4])
         );
     }
 }
