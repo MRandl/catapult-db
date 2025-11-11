@@ -1,5 +1,5 @@
 use crate::indexing::{
-    eviction::{FixedSet, neighbor_set::EvictionNeighborSet},
+    eviction::{FixedSet, neighbor_set::CatapultNeighborSet},
     node::{self, Node},
 };
 
@@ -11,7 +11,7 @@ use std::{
     sync::RwLock,
 };
 
-impl<T: EvictionNeighborSet> AdjacencyGraph<T> {
+impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
     fn next_u32<I>(iter: &mut I) -> Result<u32, String>
     where
         I: Iterator<Item = Result<u8, Error>>,

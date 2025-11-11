@@ -1,4 +1,4 @@
-use crate::indexing::eviction::neighbor_set::EvictionNeighborSet;
+use crate::indexing::eviction::neighbor_set::CatapultNeighborSet;
 
 pub struct UnboundedNeighborSet {
     neighbors: Vec<usize>,
@@ -9,7 +9,7 @@ impl UnboundedNeighborSet {
         UnboundedNeighborSet { neighbors: value }
     }
 }
-impl EvictionNeighborSet for UnboundedNeighborSet {
+impl CatapultNeighborSet for UnboundedNeighborSet {
     fn to_vec(&self) -> Vec<usize> {
         self.neighbors.clone()
     }

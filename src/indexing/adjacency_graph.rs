@@ -3,7 +3,7 @@ use itertools::Itertools;
 use crate::{
     candidates::{BitSet, CandidateEntry, SmallestK},
     indexing::{
-        engine_starter::EngineStarter, eviction::neighbor_set::EvictionNeighborSet, node::Node,
+        engine_starter::EngineStarter, eviction::neighbor_set::CatapultNeighborSet, node::Node,
     },
     numerics::VectorLike,
 };
@@ -19,12 +19,12 @@ use crate::{
 /// - [`beam_search`] implements a *best-first beam search*: it keeps only the
 ///   `beam_width` closest candidates seen so far and repeatedly expands the best
 ///   not-yet-visited candidate until no such candidate remains.
-pub struct AdjacencyGraph<T: EvictionNeighborSet> {
+pub struct AdjacencyGraph<T: CatapultNeighborSet> {
     adjacency: Vec<Node<T>>,
     starter: EngineStarter,
 }
 
-impl<T: EvictionNeighborSet> AdjacencyGraph<T> {
+impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
     pub fn new(adj: Vec<Node<T>>, engine: EngineStarter) -> Self {
         Self {
             adjacency: adj,
