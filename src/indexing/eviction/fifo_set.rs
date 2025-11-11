@@ -118,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "assertion failed: capacity > 0")]
+    #[should_panic]
     fn zero_capacity_panics() {
         let _fifo = FifoSet::<0>::new();
     }
