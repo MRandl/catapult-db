@@ -12,7 +12,7 @@ use std::{
 };
 
 impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
-    fn next_u32<I>(iter: &mut I) -> Result<u32, String>
+    fn next_u32<I, const LOAD_LI_ENDIAN: bool>(iter: &mut I) -> Result<u32, String>
     where
         I: Iterator<Item = Result<u8, Error>>,
     {
@@ -24,10 +24,17 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
                 None => return Err("Unexpected end of stream".into()),
             }
         }
-        Ok(u32::from_le_bytes(bytes))
+
+        if LOAD_LI_ENDIAN {
+            Ok(u32::from_le_bytes(bytes))
+        } else {
+            Ok(u32::from_be_bytes(bytes))
+            // For the one dude that wants to run catapultdb on a system that somehow runs on big endian.
+            // I got your back, man. Also, go take a shower.
+        }
     }
 
-    fn next_u64<I>(iter: &mut I) -> Result<u64, String>
+    fn next_u64<I, const LOAD_LI_ENDIAN: bool>(iter: &mut I) -> Result<u64, String>
     where
         I: Iterator<Item = Result<u8, Error>>,
     {
@@ -39,16 +46,29 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
                 None => return Err("Unexpected end of stream".into()),
             }
         }
-        Ok(u64::from_le_bytes(bytes))
+
+        if LOAD_LI_ENDIAN {
+            Ok(u64::from_le_bytes(bytes))
+        } else {
+            Ok(u64::from_be_bytes(bytes))
+        }
     }
 
-    pub fn load_from_path(path: PathBuf) -> Vec<Node<T>> {
-        let mut binfile = BufReader::new(File::open(path).expect("FNF")).bytes();
+    pub fn load_from_path<const LOAD_LI_ENDIAN: bool>(
+        graph_path: PathBuf,
+        payload_path: PathBuf,
+    ) -> Vec<Node<T>> {
+        let mut graph_file = BufReader::new(File::open(graph_path).expect("FNF")).bytes();
+        let mut payload_file = BufReader::new(File::open(payload_path).expect("FNF")).bytes();
 
-        let full_size = Self::next_u64(&mut binfile).expect("Misconfigured header");
-        let max_degree = Self::next_u32(&mut binfile).expect("Misconfigured header");
-        let entry_point = Self::next_u32(&mut binfile).expect("Misconfigured header");
-        let num_frozen = Self::next_u64(&mut binfile).expect("Misconfigured header");
+        let full_size =
+            Self::next_u64::<_, LOAD_LI_ENDIAN>(&mut graph_file).expect("Misconfigured header");
+        let max_degree =
+            Self::next_u32::<_, LOAD_LI_ENDIAN>(&mut graph_file).expect("Misconfigured header");
+        let entry_point =
+            Self::next_u32::<_, LOAD_LI_ENDIAN>(&mut graph_file).expect("Misconfigured header");
+        let num_frozen =
+            Self::next_u64::<_, LOAD_LI_ENDIAN>(&mut graph_file).expect("Misconfigured header");
 
         println!(
             "size {} - degree {} - entry point {} - num frozen {}",
@@ -56,13 +76,14 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
         );
 
         let mut adjacency = Vec::new();
+        let mut idx = 0;
 
-        while let Ok(pointsize) = Self::next_u32(&mut binfile) {
+        while let Ok(pointsize) = Self::next_u32::<_, LOAD_LI_ENDIAN>(&mut graph_file) {
             let mut neighs = vec![];
 
             for _ in 0..pointsize {
                 neighs.push(
-                    Self::next_u32(&mut binfile)
+                    Self::next_u32::<_, LOAD_LI_ENDIAN>(&mut graph_file)
                         .expect("Graph file declared more nodes than actually found")
                         as usize,
                 );
@@ -71,8 +92,9 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
             adjacency.push(node::Node {
                 neighbors: FixedSet::new(neighs),
                 catapults: RwLock::new(T::new()),
-                payload: Box::new([0.0]),
+                payload: Box::new([idx as f32; 8]),
             });
+            idx += 1;
         }
 
         adjacency

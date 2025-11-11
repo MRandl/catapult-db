@@ -1,7 +1,7 @@
 use crate::candidates::ordered_float::TotalF32;
 use std::hash::Hash;
 
-#[derive(PartialEq, Eq, Clone, Hash)]
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
 pub struct CandidateEntry {
     pub distance: TotalF32,
     pub index: usize,

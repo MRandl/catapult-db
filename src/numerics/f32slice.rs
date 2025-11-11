@@ -43,7 +43,7 @@ impl VectorLike for [f32] {
     /// is not a multiple of [`SIMD_LANECOUNT`].
     #[inline]
     fn l2_squared(&self, othr: &[f32]) -> f32 {
-        assert!(self.len() == othr.len());
+        assert_eq!(self.len(), othr.len());
         assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
 
         let mut intermediate_sum_lanes = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
