@@ -15,7 +15,6 @@ type SimdF32 = Simd<f32, SIMD_LANECOUNT>;
 /// - The slice length must be a multiple of [`SIMD_LANECOUNT`].
 /// - Operations involving two vectors (l2, dot product) require that they have the same length.
 /// - Mismatched lengths or vectors with SIMD-awkward lengths will panic via `assert!` in both debug and release builds.
-
 pub trait VectorLike {
     fn l2_squared(&self, othr: &Self) -> f32;
     fn l2(&self, othr: &Self) -> f32;

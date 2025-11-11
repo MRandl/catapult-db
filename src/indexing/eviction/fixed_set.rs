@@ -1,4 +1,4 @@
-use crate::indexing::eviction::neighbors::NeighborSet;
+use crate::indexing::eviction::neighbor_set::NeighborSet;
 
 pub struct FixedSet {
     neighbors: Vec<usize>,

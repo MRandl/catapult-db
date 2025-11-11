@@ -1,10 +1,14 @@
-use crate::indexing::eviction::neighbors::{EvictionNeighborSet, NeighborSet};
+use crate::indexing::{
+    eviction::{FixedSet, neighbor_set::EvictionNeighborSet},
+    node::{self, Node},
+};
 
 use super::adjacency_graph::AdjacencyGraph;
 use std::{
     fs::File,
     io::{BufReader, Error, Read},
     path::PathBuf,
+    sync::RwLock,
 };
 
 impl<T: EvictionNeighborSet> AdjacencyGraph<T> {
@@ -38,19 +42,39 @@ impl<T: EvictionNeighborSet> AdjacencyGraph<T> {
         Ok(u64::from_le_bytes(bytes))
     }
 
-    pub fn load_from_path(path: PathBuf) -> Result<Self, String> {
+    pub fn load_from_path(path: PathBuf) -> Vec<Node<T>> {
         let mut binfile = BufReader::new(File::open(path).expect("FNF")).bytes();
 
         let full_size = Self::next_u64(&mut binfile).expect("Misconfigured header");
         let max_degree = Self::next_u32(&mut binfile).expect("Misconfigured header");
         let entry_point = Self::next_u32(&mut binfile).expect("Misconfigured header");
-        let num_frozen = Self::next_u32(&mut binfile).expect("Misconfigured header");
+        let num_frozen = Self::next_u64(&mut binfile).expect("Misconfigured header");
 
         println!(
             "size {} - degree {} - entry point {} - num frozen {}",
             full_size, max_degree, entry_point, num_frozen
         );
 
-        Err("NOT THERE YET".into())
+        let mut adjacency = Vec::new();
+
+        while let Ok(pointsize) = Self::next_u64(&mut binfile) {
+            let mut neighs = vec![];
+
+            for _ in 0..pointsize {
+                neighs.push(
+                    Self::next_u64(&mut binfile)
+                        .expect("Graph file declared more nodes than actually found")
+                        as usize,
+                );
+            }
+
+            adjacency.push(node::Node {
+                neighbors: FixedSet::new(neighs),
+                catapults: RwLock::new(T::new()),
+                payload: Box::new([0.0]),
+            });
+        }
+
+        adjacency
     }
 }

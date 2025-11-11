@@ -5,4 +5,4 @@ pub mod fifo_set;
 mod fixed_set;
 pub use fixed_set::*;
 
-pub mod neighbors;
+pub mod neighbor_set;

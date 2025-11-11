@@ -1,4 +1,4 @@
-use crate::indexing::eviction::neighbors::{EvictionNeighborSet, NeighborSet};
+use crate::indexing::eviction::neighbor_set::{EvictionNeighborSet, NeighborSet};
 
 pub struct UnboundedNeighborSet {
     neighbors: Vec<usize>,
@@ -19,5 +19,9 @@ impl NeighborSet for UnboundedNeighborSet {
 impl EvictionNeighborSet for UnboundedNeighborSet {
     fn insert(&mut self, neighbor: usize) {
         self.neighbors.push(neighbor);
+    }
+
+    fn new() -> Self {
+        UnboundedNeighborSet { neighbors: vec![] }
     }
 }

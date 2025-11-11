@@ -1,34 +1,38 @@
 use std::collections::VecDeque;
 
-use crate::indexing::eviction::neighbors::{EvictionNeighborSet, NeighborSet};
+use crate::indexing::eviction::neighbor_set::{EvictionNeighborSet, NeighborSet};
 
-pub struct FifoSet {
-    cap: usize,
+pub struct FifoSet<const CAPACITY: usize> {
     queue: VecDeque<usize>,
 }
 
-impl FifoSet {
-    pub fn new(cap: usize) -> Self {
-        assert!(cap > 0);
+impl<const CAPACITY: usize> FifoSet<CAPACITY> {
+    pub fn new() -> Self {
+        assert!(CAPACITY > 0);
         FifoSet {
-            cap,
-            queue: VecDeque::with_capacity(cap),
+            queue: VecDeque::with_capacity(CAPACITY),
         }
     }
 }
 
-impl NeighborSet for FifoSet {
+impl<const CAPACITY: usize> NeighborSet for FifoSet<CAPACITY> {
     fn as_slice(&self) -> Vec<usize> {
         self.queue.iter().copied().collect::<Vec<_>>()
     }
 }
 
-impl EvictionNeighborSet for FifoSet {
+impl<const CAPACITY: usize> EvictionNeighborSet for FifoSet<CAPACITY> {
     fn insert(&mut self, key: usize) {
-        if self.queue.len() == self.cap {
+        if self.queue.len() == CAPACITY {
             self.queue.pop_front();
         }
         self.queue.push_back(key);
+    }
+
+    fn new() -> Self {
+        FifoSet {
+            queue: VecDeque::new(),
+        }
     }
 }
 
@@ -38,14 +42,13 @@ mod tests {
 
     #[test]
     fn new_creates_empty_fifo_set() {
-        let fifo = FifoSet::new(5);
-        assert_eq!(fifo.cap, 5);
+        let fifo = FifoSet::<5>::new();
         assert_eq!(fifo.queue.len(), 0);
     }
 
     #[test]
     fn insert_single_element() {
-        let mut fifo = FifoSet::new(3);
+        let mut fifo = FifoSet::<3>::new();
         fifo.insert(10);
         assert_eq!(fifo.queue.len(), 1);
         assert_eq!(fifo.queue[0], 10);
@@ -53,7 +56,7 @@ mod tests {
 
     #[test]
     fn insert_up_to_capacity() {
-        let mut fifo = FifoSet::new(3);
+        let mut fifo = FifoSet::<3>::new();
         fifo.insert(1);
         fifo.insert(2);
         fifo.insert(3);
@@ -66,7 +69,7 @@ mod tests {
 
     #[test]
     fn insert_beyond_capacity_evicts_oldest() {
-        let mut fifo = FifoSet::new(3);
+        let mut fifo = FifoSet::<3>::new();
         fifo.insert(1);
         fifo.insert(2);
         fifo.insert(3);
@@ -80,7 +83,7 @@ mod tests {
 
     #[test]
     fn fifo_order_maintained_over_multiple_evictions() {
-        let mut fifo = FifoSet::new(3);
+        let mut fifo = FifoSet::<3>::new();
 
         // Fill to capacity
         fifo.insert(1);
@@ -100,7 +103,7 @@ mod tests {
 
     #[test]
     fn capacity_one_always_contains_last_inserted() {
-        let mut fifo = FifoSet::new(1);
+        let mut fifo = FifoSet::<1>::new();
 
         fifo.insert(10);
         assert_eq!(fifo.queue[0], 10);
@@ -115,14 +118,14 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "assertion failed: capacity > 0")]
     fn zero_capacity_panics() {
-        let _fifo = FifoSet::new(0);
+        let _fifo = FifoSet::<0>::new();
     }
 
     #[test]
     fn large_capacity_behaves_correctly() {
-        let mut fifo = FifoSet::new(1000);
+        let mut fifo = FifoSet::<1000>::new();
 
         // Insert 500 elements
         for i in 0..500 {
@@ -136,7 +139,7 @@ mod tests {
 
     #[test]
     fn duplicate_values_are_inserted_without_deduplication() {
-        let mut fifo = FifoSet::new(5);
+        let mut fifo = FifoSet::<5>::new();
 
         fifo.insert(1);
         fifo.insert(1);
@@ -150,7 +153,7 @@ mod tests {
 
     #[test]
     fn insert_sequence_with_eviction_maintains_order() {
-        let mut fifo = FifoSet::new(4);
+        let mut fifo = FifoSet::<4>::new();
 
         // Insert sequence: 10, 20, 30, 40, 50, 60
         for val in [10, 20, 30, 40, 50, 60] {
@@ -167,7 +170,7 @@ mod tests {
 
     #[test]
     fn alternating_insert_pattern() {
-        let mut fifo = FifoSet::new(2);
+        let mut fifo = FifoSet::<2>::new();
 
         fifo.insert(1);
         fifo.insert(2);
@@ -184,7 +187,7 @@ mod tests {
 
     #[test]
     fn stress_test_many_insertions() {
-        let mut fifo = FifoSet::new(100);
+        let mut fifo = FifoSet::<100>::new();
 
         // Insert 10,000 elements
         for i in 0..10_000 {

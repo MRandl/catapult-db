@@ -4,4 +4,5 @@ pub trait NeighborSet {
 
 pub trait EvictionNeighborSet: NeighborSet {
     fn insert(&mut self, neighbor: usize);
+    fn new() -> Self;
 }

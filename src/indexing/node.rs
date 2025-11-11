@@ -1,6 +1,6 @@
 use std::sync::RwLock;
 
-use crate::indexing::eviction::{FixedSet, neighbors::EvictionNeighborSet};
+use crate::indexing::eviction::{FixedSet, neighbor_set::EvictionNeighborSet};
 
 pub struct Node<T: EvictionNeighborSet> {
     pub neighbors: FixedSet,

@@ -4,7 +4,7 @@ use crate::{
     candidates::{BitSet, CandidateEntry, SmallestK},
     indexing::{
         engine_starter::EngineStarter,
-        eviction::neighbors::{EvictionNeighborSet, NeighborSet},
+        eviction::neighbor_set::{EvictionNeighborSet, NeighborSet},
         node::Node,
     },
     numerics::VectorLike,
