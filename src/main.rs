@@ -26,9 +26,14 @@ fn main() {
         PathBuf::from_str("test_index/4vecs/ann.data").unwrap(),
     );
 
-    let adj_len = adjacency.len();
-    let full_graph = AdjacencyGraph::new(adjacency, EngineStarter::new(10, 8, adj_len, Some(42)));
-    println!("Adjacency graph loaded with {} nodes", adj_len);
+    let graph_size = adjacency.len();
+    let num_hash = 10;
+    let plane_dim = 8;
+    let engine_seed = Some(42);
+    let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
+
+    let full_graph = AdjacencyGraph::new(adjacency, engine);
+    println!("Adjacency graph loaded with {} nodes", graph_size);
 
     // Search each random vector sequentially
     println!("Starting sequential search of {} vectors...", queries.len());

@@ -1,5 +1,4 @@
 #![feature(portable_simd)]
-#![allow(dead_code)]
 
 pub mod candidates;
 pub mod indexing;
