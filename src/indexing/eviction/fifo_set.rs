@@ -15,6 +15,12 @@ impl<const CAPACITY: usize> FifoSet<CAPACITY> {
     }
 }
 
+impl<const CAPACITY: usize> Default for FifoSet<CAPACITY> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const CAPACITY: usize> CatapultNeighborSet for FifoSet<CAPACITY> {
     fn to_vec(&self) -> Vec<usize> {
         self.queue.iter().copied().collect::<Vec<_>>()
