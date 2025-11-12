@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::indexing::eviction::neighbor_set::CatapultNeighborSet;
+use crate::indexing::eviction::catapult_neighbor_set::CatapultNeighborSet;
 
 pub struct FifoSet<const CAPACITY: usize> {
     queue: VecDeque<usize>,
@@ -23,7 +23,7 @@ impl<const CAPACITY: usize> Default for FifoSet<CAPACITY> {
 
 impl<const CAPACITY: usize> CatapultNeighborSet for FifoSet<CAPACITY> {
     fn to_vec(&self) -> Vec<usize> {
-        self.queue.iter().copied().collect::<Vec<_>>()
+        self.queue.iter().copied().collect()
     }
 
     fn insert(&mut self, key: usize) {

@@ -1,6 +1,6 @@
 use std::{fmt::Debug, sync::RwLock};
 
-use crate::indexing::eviction::{FixedSet, neighbor_set::CatapultNeighborSet};
+use crate::indexing::eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet};
 
 pub struct Node<T: CatapultNeighborSet> {
     pub neighbors: FixedSet,
