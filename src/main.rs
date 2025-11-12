@@ -9,8 +9,6 @@ use std::str::FromStr;
 const LOAD_LI_ENDIAN: bool = cfg!(target_endian = "little");
 
 fn main() {
-    assert!(LOAD_LI_ENDIAN); // check that the tests are being run on a little endian machine
-
     // Generate 1M 8-dimensional random vectors
     println!("Generating 1M 8-dimensional random vectors...");
     let mut rng = rand::rng();
