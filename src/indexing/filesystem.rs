@@ -54,6 +54,41 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
         }
     }
 
+    fn next_f32<I, const LOAD_LI_ENDIAN: bool>(iter: &mut I) -> Result<f32, String>
+    where
+        I: Iterator<Item = Result<u8, Error>>,
+    {
+        let mut bytes = [0u8; 4];
+        for b in &mut bytes {
+            match iter.next() {
+                Some(Ok(v)) => *b = v,
+                Some(Err(e)) => return Err(e.to_string()),
+                None => return Err("Unexpected end of stream".into()),
+            }
+        }
+
+        if LOAD_LI_ENDIAN {
+            Ok(f32::from_le_bytes(bytes))
+        } else {
+            Ok(f32::from_be_bytes(bytes))
+        }
+    }
+
+    fn next_payload<I, const LOAD_LI_ENDIAN: bool>(
+        iter: &mut I,
+        size: usize,
+    ) -> Result<Vec<f32>, String>
+    where
+        I: Iterator<Item = Result<u8, Error>>,
+    {
+        let mut payload = Vec::with_capacity(size);
+        for _ in 0..size {
+            let entry = Self::next_f32::<_, LOAD_LI_ENDIAN>(iter)?;
+            payload.push(entry);
+        }
+        Ok(payload)
+    }
+
     pub fn load_from_path<const LOAD_LI_ENDIAN: bool>(
         graph_path: PathBuf,
         payload_path: PathBuf,
@@ -70,13 +105,17 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
         let num_frozen =
             Self::next_u64::<_, LOAD_LI_ENDIAN>(&mut graph_file).expect("Misconfigured header");
 
+        let npoints =
+            Self::next_u32::<_, LOAD_LI_ENDIAN>(&mut payload_file).expect("Misconfigured header");
+        let payload_dim = Self::next_u32::<_, LOAD_LI_ENDIAN>(&mut payload_file)
+            .expect("Misconfigured header") as usize;
+
         println!(
-            "size {} - degree {} - entry point {} - num frozen {}",
-            full_size, max_degree, entry_point, num_frozen
+            "size {} - degree {} - entry point {} - num frozen {} - npoints {} - payload_dim {}",
+            full_size, max_degree, entry_point, num_frozen, npoints, payload_dim
         );
 
         let mut adjacency = Vec::new();
-        let mut idx = 0;
 
         while let Ok(pointsize) = Self::next_u32::<_, LOAD_LI_ENDIAN>(&mut graph_file) {
             let mut neighs = vec![];
@@ -89,13 +128,20 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
                 );
             }
 
+            let associated_payload =
+                Self::next_payload::<_, LOAD_LI_ENDIAN>(&mut payload_file, payload_dim)
+                    .expect("Error while parsing payloads");
+
             adjacency.push(node::Node {
                 neighbors: FixedSet::new(neighs),
                 catapults: RwLock::new(T::new()),
-                payload: Box::new([idx as f32; 8]),
+                payload: associated_payload.into_boxed_slice(),
             });
-            idx += 1;
         }
+
+        // we should have read all of the file contents by now.
+        assert!(graph_file.count() == 0);
+        assert!(payload_file.count() == 0);
 
         adjacency
     }
