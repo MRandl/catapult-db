@@ -34,7 +34,7 @@ impl Stats {
     /// when debugging is over
     pub fn dump(&self, path: String) {
         //TODO
-        println!("Dumping to sysout, supposedly at path {}", path);
+        println!("Dumping to sysout, supposedly at path {path}");
         println!(
             "beam calls : {}, nodes queried : {}",
             self.beam_calls, self.nodes_queried

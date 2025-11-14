@@ -112,8 +112,7 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
             .expect("Misconfigured header") as usize;
 
         println!(
-            "size {} - degree {} - entry point {} - num frozen {} - npoints {} - payload_dim {}",
-            full_size, max_degree, entry_point, num_frozen, npoints, payload_dim
+            "size {full_size} - degree {max_degree} - entry point {entry_point} - num frozen {num_frozen} - npoints {npoints} - payload_dim {payload_dim}",
         );
 
         let mut adjacency = Vec::new();
