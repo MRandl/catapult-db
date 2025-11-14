@@ -62,11 +62,11 @@ impl SimilarityHasher {
     }
 
     pub fn hash_int(&self, vector: &[f32]) -> u64 {
-        debug_assert!(
+        assert!(
             vector.len() == self.stored_vectors_dim,
             "input vector has wrong dimension"
         );
-        debug_assert!(self.projections.len() <= 64);
+        assert!(self.projections.len() <= u64::BITS as usize); // less than 64 planes to fit signature in u64
 
         let mut projected = 0u64;
         for plane in self.projections.iter() {

@@ -1,5 +1,5 @@
 use crate::indexing::{
-    eviction::{FixedSet, neighbor_set::CatapultNeighborSet},
+    eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet},
     node::{self, Node},
 };
 
