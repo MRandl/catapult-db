@@ -6,6 +6,8 @@ use std::hint::black_box;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use catapult::fs::Queries;
+
 const LOAD_LI_ENDIAN: bool = cfg!(target_endian = "little");
 
 fn main() {
@@ -23,6 +25,8 @@ fn main() {
         PathBuf::from_str("test_index/4vecs/ann").unwrap(),
         PathBuf::from_str("test_index/4vecs/ann.data").unwrap(),
     );
+
+    let queries = Vec::<Vec<f32>>::load_from_npy("test_index/4vecs/4vecs.npy");
 
     let graph_size = adjacency.len();
     let num_hash = 10;

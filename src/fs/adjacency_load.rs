@@ -3,7 +3,8 @@ use crate::indexing::{
     node::{self, Node},
 };
 
-use super::adjacency_graph::AdjacencyGraph;
+use crate::indexing::adjacency_graph::AdjacencyGraph;
+
 use std::{
     fs::File,
     io::{BufReader, Error, Read},
