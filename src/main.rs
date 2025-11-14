@@ -5,6 +5,8 @@ use clap::Parser;
 use std::hint::black_box;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
+use std::thread;
 
 use catapult::fs::Queries;
 
@@ -30,6 +32,10 @@ struct Args {
     /// Whethere catapults should be used or not
     #[arg(short, long)]
     catapults: bool,
+
+    /// Number of threads to use for parallel search
+    #[arg(short, long, default_value_t = 1)]
+    threads: usize,
 }
 
 fn main() {
@@ -46,43 +52,83 @@ fn main() {
 
     let graph_size = adjacency.len();
     let num_hash = 10;
-    let plane_dim = 768;
+    let plane_dim = queries[0].len();
     let engine_seed = Some(42);
     let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
 
-    let full_graph = AdjacencyGraph::new(adjacency, engine, args.catapults);
+    let full_graph = Arc::new(AdjacencyGraph::new(adjacency, engine, args.catapults));
     println!("Adjacency graph loaded with {} nodes", graph_size);
 
-    // Search each random vector sequentially
-    println!("Starting sequential search of {} vectors...", queries.len());
+    let num_threads = args.threads;
+    let num_queries = queries.len();
+    println!(
+        "Starting search of {} vectors using {} thread(s)...",
+        num_queries, num_threads
+    );
     let start_time = std::time::Instant::now();
 
-    let mut reses = Vec::with_capacity(queries.len());
+    let reses = if num_threads == 1 {
+        // Single-threaded execution
+        let mut reses = Vec::with_capacity(num_queries);
 
-    for (i, query) in queries.iter().enumerate() {
-        let _result = black_box(full_graph.beam_search(query, 2, 2));
-        reses.push(_result[0].index);
+        for (i, query) in queries.iter().enumerate() {
+            let _result = black_box(full_graph.beam_search(query, 2, 2));
+            reses.push(_result[0].index);
 
-        // Print progress every 100k queries
-        if (i + 1) % 100_000 == 0 {
-            let elapsed = start_time.elapsed();
-            let qps = (i + 1) as f64 / elapsed.as_secs_f64();
-            println!(
-                "Processed {}/{} queries ({:.2} QPS)",
-                i + 1,
-                queries.len(),
-                qps
-            );
+            // Print progress every 100k queries
+            if (i + 1) % 100_000 == 0 {
+                let elapsed = start_time.elapsed();
+                let qps = (i + 1) as f64 / elapsed.as_secs_f64();
+                println!(
+                    "Processed {}/{} queries ({:.2} QPS)",
+                    i + 1,
+                    num_queries,
+                    qps
+                );
+            }
         }
-    }
+
+        reses
+    } else {
+        // Multi-threaded execution
+        let queries = Arc::new(queries);
+        let chunk_size = (num_queries + num_threads - 1) / num_threads;
+
+        let handles: Vec<_> = (0..num_threads)
+            .map(|thread_id| {
+                let graph = Arc::clone(&full_graph);
+                let queries_clone = Arc::clone(&queries);
+                let start = thread_id * chunk_size;
+                let end = std::cmp::min(start + chunk_size, num_queries);
+
+                thread::spawn(move || {
+                    let mut local_results = Vec::with_capacity(end - start);
+                    for query in &queries_clone[start..end] {
+                        let _result = black_box(graph.beam_search(query, 2, 2));
+                        local_results.push(_result[0].index);
+                    }
+                    local_results
+                })
+            })
+            .collect();
+
+        // Collect results from all threads
+        let mut reses = Vec::with_capacity(num_queries);
+        for handle in handles {
+            let local_results = handle.join().expect("Thread panicked");
+            reses.extend(local_results);
+        }
+
+        reses
+    };
 
     println!("{:?}", reses.into_iter().reduce(|a, b| a + b));
 
     let elapsed = start_time.elapsed();
-    let total_qps = queries.len() as f64 / elapsed.as_secs_f64();
+    let total_qps = num_queries as f64 / elapsed.as_secs_f64();
     println!(
         "Completed {} searches in {:.2}s ({:.2} QPS)",
-        queries.len(),
+        num_queries,
         elapsed.as_secs_f64(),
         total_qps
     );
