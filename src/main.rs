@@ -48,7 +48,10 @@ fn main() {
         PathBuf::from_str(&args.payload).unwrap(),
     );
 
-    let queries = Vec::<Vec<f32>>::load_from_npy(&args.queries);
+    let queries: Vec<Vec<f32>> = Vec::<Vec<f32>>::load_from_npy(&args.queries)
+        .into_iter()
+        .take(500_000)
+        .collect();
 
     let graph_size = adjacency.len();
     let num_hash = 10;
@@ -57,71 +60,41 @@ fn main() {
     let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
 
     let full_graph = Arc::new(AdjacencyGraph::new(adjacency, engine, args.catapults));
-    println!("Adjacency graph loaded with {} nodes", graph_size);
+    println!("Adjacency graph loaded with {graph_size} nodes");
 
     let num_threads = args.threads;
     let num_queries = queries.len();
-    println!(
-        "Starting search of {} vectors using {} thread(s)...",
-        num_queries, num_threads
-    );
+    println!("Starting search of {num_queries} vectors using {num_threads} thread(s)...",);
     let start_time = std::time::Instant::now();
 
-    let reses = if num_threads == 1 {
-        // Single-threaded execution
-        let mut reses = Vec::with_capacity(num_queries);
+    // Multi-threaded execution
+    let queries = Arc::new(queries);
+    let chunk_size = num_queries.div_ceil(num_threads);
 
-        for (i, query) in queries.iter().enumerate() {
-            let _result = black_box(full_graph.beam_search(query, 2, 2));
-            reses.push(_result[0].index);
+    let handles: Vec<_> = (0..num_threads)
+        .map(|thread_id| {
+            let graph = Arc::clone(&full_graph);
+            let queries_clone = Arc::clone(&queries);
+            let start = thread_id * chunk_size;
+            let end = std::cmp::min(start + chunk_size, num_queries);
 
-            // Print progress every 100k queries
-            if (i + 1) % 100_000 == 0 {
-                let elapsed = start_time.elapsed();
-                let qps = (i + 1) as f64 / elapsed.as_secs_f64();
-                println!(
-                    "Processed {}/{} queries ({:.2} QPS)",
-                    i + 1,
-                    num_queries,
-                    qps
-                );
-            }
-        }
-
-        reses
-    } else {
-        // Multi-threaded execution
-        let queries = Arc::new(queries);
-        let chunk_size = (num_queries + num_threads - 1) / num_threads;
-
-        let handles: Vec<_> = (0..num_threads)
-            .map(|thread_id| {
-                let graph = Arc::clone(&full_graph);
-                let queries_clone = Arc::clone(&queries);
-                let start = thread_id * chunk_size;
-                let end = std::cmp::min(start + chunk_size, num_queries);
-
-                thread::spawn(move || {
-                    let mut local_results = Vec::with_capacity(end - start);
-                    for query in &queries_clone[start..end] {
-                        let _result = black_box(graph.beam_search(query, 2, 2));
-                        local_results.push(_result[0].index);
-                    }
-                    local_results
-                })
+            thread::spawn(move || {
+                let mut local_results = Vec::with_capacity(end - start);
+                for query in &queries_clone[start..end] {
+                    let _result = black_box(graph.beam_search(query, 2, 2));
+                    local_results.push(_result[0].index);
+                }
+                local_results
             })
-            .collect();
+        })
+        .collect();
 
-        // Collect results from all threads
-        let mut reses = Vec::with_capacity(num_queries);
-        for handle in handles {
-            let local_results = handle.join().expect("Thread panicked");
-            reses.extend(local_results);
-        }
-
-        reses
-    };
-
+    // Collect results from all threads
+    let mut reses = Vec::with_capacity(num_queries);
+    for handle in handles {
+        let local_results = handle.join().expect("Thread panicked");
+        reses.extend(local_results);
+    }
     println!("{:?}", reses.into_iter().reduce(|a, b| a + b));
 
     let elapsed = start_time.elapsed();
