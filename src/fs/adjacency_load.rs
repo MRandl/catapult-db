@@ -117,7 +117,6 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
         );
 
         let mut adjacency = Vec::new();
-        let mut index = 0;
 
         while let Ok(pointsize) = Self::next_u32::<_, LOAD_LI_ENDIAN>(&mut graph_file) {
             let mut neighs = vec![];
@@ -130,10 +129,6 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
                 );
             }
 
-            if index % 10000 == 0 {
-                println!("Processed {} nodes", index);
-            }
-
             let associated_payload =
                 Self::next_payload::<_, LOAD_LI_ENDIAN>(&mut payload_file, payload_dim)
                     .expect("Error while parsing payloads");
@@ -143,8 +138,6 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
                 catapults: RwLock::new(T::new()),
                 payload: associated_payload.into_boxed_slice(),
             });
-
-            index += 1;
         }
 
         // we should have read all of the file contents by now.

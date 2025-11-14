@@ -46,7 +46,7 @@ fn main() {
 
     let graph_size = adjacency.len();
     let num_hash = 10;
-    let plane_dim = 8;
+    let plane_dim = 768;
     let engine_seed = Some(42);
     let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
 
@@ -73,7 +73,6 @@ fn main() {
                 queries.len(),
                 qps
             );
-            println!("q {:?} - {:?}", query, _result)
         }
     }
 
