@@ -1,7 +1,7 @@
 use catapult::indexing::adjacency_graph::AdjacencyGraph;
 use catapult::indexing::engine_starter::EngineStarter;
 use catapult::indexing::eviction::FifoSet;
-use rand::Rng;
+use clap::Parser;
 use std::hint::black_box;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -10,23 +10,39 @@ use catapult::fs::Queries;
 
 const LOAD_LI_ENDIAN: bool = cfg!(target_endian = "little");
 
+/// Vector search engine using adjacency graphs
+#[derive(Parser, Debug)]
+#[command(name = "catapult")]
+#[command(about = "A vector search engine using adjacency graphs", long_about = None)]
+struct Args {
+    /// Path to the queries file (numpy format)
+    #[arg(short, long)]
+    queries: String,
+
+    /// Path to the graph metadata file
+    #[arg(short, long)]
+    graph: String,
+
+    /// Path to the graph payload/data file
+    #[arg(short, long)]
+    payload: String,
+
+    /// Whethere catapults should be used or not
+    #[arg(short, long)]
+    catapults: bool,
+}
+
 fn main() {
-    // Generate 1M 8-dimensional random vectors
-    println!("Generating 1M 8-dimensional random vectors...");
-    let mut rng = rand::rng();
-    let queries: Vec<Vec<f32>> = (0..1_000_000)
-        .map(|_| (0..8).map(|_| rng.random::<f32>()).collect())
-        .collect();
-    println!("Generated {} query vectors", queries.len());
+    let args = Args::parse();
 
     // Load the adjacency graph from file
     println!("Loading adjacency graph...");
     let adjacency = AdjacencyGraph::<FifoSet<30>>::load_from_path::<LOAD_LI_ENDIAN>(
-        PathBuf::from_str("test_index/4vecs/ann").unwrap(),
-        PathBuf::from_str("test_index/4vecs/ann.data").unwrap(),
+        PathBuf::from_str(&args.graph).unwrap(),
+        PathBuf::from_str(&args.payload).unwrap(),
     );
 
-    let queries = Vec::<Vec<f32>>::load_from_npy("test_index/4vecs/4vecs.npy");
+    let queries = Vec::<Vec<f32>>::load_from_npy(&args.queries);
 
     let graph_size = adjacency.len();
     let num_hash = 10;
@@ -34,7 +50,7 @@ fn main() {
     let engine_seed = Some(42);
     let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
 
-    let full_graph = AdjacencyGraph::new(adjacency, engine);
+    let full_graph = AdjacencyGraph::new(adjacency, engine, args.catapults);
     println!("Adjacency graph loaded with {} nodes", graph_size);
 
     // Search each random vector sequentially

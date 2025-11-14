@@ -22,13 +22,15 @@ use crate::{
 pub struct AdjacencyGraph<T: CatapultNeighborSet> {
     adjacency: Vec<Node<T>>,
     starter: EngineStarter,
+    catapults: bool,
 }
 
 impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
-    pub fn new(adj: Vec<Node<T>>, engine: EngineStarter) -> Self {
+    pub fn new(adj: Vec<Node<T>>, engine: EngineStarter, catapults: bool) -> Self {
         Self {
             adjacency: adj,
             starter: engine,
+            catapults,
         }
     }
 
@@ -111,11 +113,13 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
         let mut candidate_vec = candidates.into_iter().collect::<Vec<_>>();
         candidate_vec.sort();
 
-        self.adjacency[initial_best_node]
-            .catapults
-            .write()
-            .unwrap()
-            .insert(candidate_vec[0].index);
+        if self.catapults {
+            self.adjacency[initial_best_node]
+                .catapults
+                .write()
+                .unwrap()
+                .insert(candidate_vec[0].index);
+        }
 
         candidate_vec.into_iter().take(k).collect()
     }
@@ -170,7 +174,7 @@ mod tests {
             },
         ];
         // Start from node 0
-        AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 4, Some(42)))
+        AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 4, Some(42)), true)
     }
 
     #[test]
@@ -236,7 +240,7 @@ mod tests {
             },
         ];
         // Start points: 0, 2
-        let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 3, Some(42)));
+        let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 3, Some(42)), true);
         let query = vec![1.0; 8];
         let k = 2;
         let beam_width = 3;
@@ -296,7 +300,7 @@ mod tests {
                 catapults: RwLock::new(UnboundedNeighborSet::from(vec![])),
             },
         ];
-        let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 5, Some(42)));
+        let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 5, Some(42)), true);
         let query = vec![0.0; 8];
         let k = 1;
         let beam_width = 2; // Tight beam width forces early pruning
