@@ -92,7 +92,7 @@ fn main() {
     } else {
         // Multi-threaded execution
         let queries = Arc::new(queries);
-        let chunk_size = (num_queries + num_threads - 1) / num_threads;
+        let chunk_size = num_queries.div_ceil(num_threads);
 
         let handles: Vec<_> = (0..num_threads)
             .map(|thread_id| {

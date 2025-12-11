@@ -52,6 +52,7 @@ impl VectorLike for [f32] {
         let othr_chunks = othr.as_chunks::<SIMD_LANECOUNT>().0.iter();
 
         for (&slice_self, &slice_othr) in self_chunks.zip(othr_chunks) {
+            //TODO: issue t0 cache prefetch calls. preferably portable intrinsics
             let f32simd_slf = SimdF32::from_array(slice_self);
             let f32simd_oth = SimdF32::from_array(slice_othr);
             let diff = f32simd_slf - f32simd_oth;

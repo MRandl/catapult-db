@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use crate::{
-    candidates::{BitSet, CandidateEntry, SmallestK},
+    candidates::{CandidateEntry, CompressedBitset, SmallestK},
     indexing::{
         engine_starter::EngineStarter, eviction::catapult_neighbor_set::CatapultNeighborSet,
         node::Node,
@@ -61,7 +61,7 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
         assert!(beam_width >= k);
 
         let mut candidates: SmallestK<CandidateEntry> = SmallestK::new(beam_width);
-        let mut visited = BitSet::new(self.adjacency.len());
+        let mut visited = CompressedBitset::new();
 
         // find a few starting points for the beam call, using LSH
         let starting_indices = self.starter.select_starting_points(query, beam_width);
@@ -103,10 +103,10 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
                 });
             }
 
-            visited.set_bit(best_candidate_index);
+            visited.set(best_candidate_index);
             best_index_in_candidates = candidates
                 .iter()
-                .filter(|&elem| !visited.get_bit(elem.index))
+                .filter(|&elem| !visited.get(elem.index))
                 .min()
                 .map(|e| e.index)
         }
