@@ -38,8 +38,8 @@ impl SimilarityHasher {
                 (0..stored_vectors_dim / SIMD_LANECOUNT)
                     .map(|_| {
                         let mut block = [0.0; SIMD_LANECOUNT];
-                        for i in 0..SIMD_LANECOUNT {
-                            block[i] = gaussian_iter.next().unwrap();
+                        for b in block.iter_mut() {
+                            *b = gaussian_iter.next().unwrap();
                         }
                         AlignedBlock::new(block)
                     })

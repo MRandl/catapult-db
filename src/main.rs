@@ -70,14 +70,11 @@ fn main() {
     let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
 
     let full_graph = Arc::new(AdjacencyGraph::new(adjacency, engine, args.catapults));
-    println!("Adjacency graph loaded with {} nodes", graph_size);
+    println!("Adjacency graph loaded with {graph_size} nodes");
 
     let num_threads = args.threads;
     let num_queries = queries.len();
-    println!(
-        "Starting search of {} vectors using {} thread(s)...",
-        num_queries, num_threads
-    );
+    println!("Starting search of {num_queries} vectors using {num_threads} thread(s)...");
     let start_time = std::time::Instant::now();
 
     let reses = if num_threads == 1 {
