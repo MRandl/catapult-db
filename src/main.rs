@@ -1,6 +1,8 @@
 use catapult::indexing::adjacency_graph::AdjacencyGraph;
 use catapult::indexing::engine_starter::EngineStarter;
 use catapult::indexing::eviction::FifoSet;
+use catapult::numerics::SIMD_LANECOUNT;
+use catapult::numerics::aligned_block::AlignedBlock;
 use clap::Parser;
 use std::hint::black_box;
 use std::path::PathBuf;
@@ -36,6 +38,14 @@ struct Args {
     /// Number of threads to use for parallel search
     #[arg(short, long, default_value_t = 1)]
     threads: usize,
+
+    /// Number of neighbors to return for each query
+    #[arg(long)]
+    num_neighbors: usize,
+
+    /// Width for beam search
+    #[arg(long)]
+    beam_width: usize,
 }
 
 fn main() {
@@ -48,11 +58,14 @@ fn main() {
         PathBuf::from_str(&args.payload).unwrap(),
     );
 
-    let queries = Vec::<Vec<f32>>::load_from_npy(&args.queries);
+    let queries: Vec<Vec<AlignedBlock>> = Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries)
+        .into_iter()
+        .take(300_000)
+        .collect();
 
     let graph_size = adjacency.len();
     let num_hash = 10;
-    let plane_dim = queries[0].len();
+    let plane_dim = queries[0].len() * SIMD_LANECOUNT;
     let engine_seed = Some(42);
     let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
 
@@ -72,7 +85,8 @@ fn main() {
         let mut reses = Vec::with_capacity(num_queries);
 
         for (i, query) in queries.iter().enumerate() {
-            let _result = black_box(full_graph.beam_search(query, 2, 2));
+            let _result =
+                black_box(full_graph.beam_search(query, args.num_neighbors, args.beam_width));
             reses.push(_result[0].index);
 
             // Print progress every 100k queries
@@ -104,7 +118,11 @@ fn main() {
                 thread::spawn(move || {
                     let mut local_results = Vec::with_capacity(end - start);
                     for query in &queries_clone[start..end] {
-                        let _result = black_box(graph.beam_search(query, 2, 2));
+                        let _result = black_box(graph.beam_search(
+                            query,
+                            args.num_neighbors,
+                            args.beam_width,
+                        ));
                         local_results.push(_result[0].index);
                     }
                     local_results

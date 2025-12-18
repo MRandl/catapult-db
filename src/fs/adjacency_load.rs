@@ -1,6 +1,9 @@
-use crate::indexing::{
-    eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet},
-    node::{self, Node},
+use crate::{
+    indexing::{
+        eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet},
+        node::{self, Node},
+    },
+    numerics::{SIMD_LANECOUNT, aligned_block::AlignedBlock},
 };
 
 use crate::indexing::adjacency_graph::AdjacencyGraph;
@@ -78,14 +81,20 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
     fn next_payload<I, const LOAD_LI_ENDIAN: bool>(
         iter: &mut I,
         size: usize,
-    ) -> Result<Vec<f32>, String>
+    ) -> Result<Vec<AlignedBlock>, String>
     where
         I: Iterator<Item = Result<u8, Error>>,
     {
-        let mut payload = Vec::with_capacity(size);
-        for _ in 0..size {
-            let entry = Self::next_f32::<_, LOAD_LI_ENDIAN>(iter)?;
-            payload.push(entry);
+        assert!(size.is_multiple_of(SIMD_LANECOUNT));
+
+        let final_length = size / SIMD_LANECOUNT;
+        let mut payload = Vec::with_capacity(final_length);
+        for _ in 0..final_length {
+            let mut block = [0.0; 8];
+            for entry in block.iter_mut() {
+                *entry = Self::next_f32::<_, LOAD_LI_ENDIAN>(iter)?;
+            }
+            payload.push(AlignedBlock::new(block));
         }
         Ok(payload)
     }

@@ -6,7 +6,7 @@ use crate::{
         engine_starter::EngineStarter, eviction::catapult_neighbor_set::CatapultNeighborSet,
         node::Node,
     },
-    numerics::VectorLike,
+    numerics::{VectorLike, aligned_block::AlignedBlock},
 };
 
 /// In-memory adjacency graph used for approximate nearest-neighbor (ANN) search.
@@ -57,7 +57,12 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
     /// # Panics
     /// - If `beam_width < k`.
     /// - If neighbor indices are out of bounds (violates the graph invariant).
-    pub fn beam_search(&self, query: &[f32], k: usize, beam_width: usize) -> Vec<CandidateEntry> {
+    pub fn beam_search(
+        &self,
+        query: &[AlignedBlock],
+        k: usize,
+        beam_width: usize,
+    ) -> Vec<CandidateEntry> {
         assert!(beam_width >= k);
 
         let mut candidates: SmallestK<CandidateEntry> = SmallestK::new(beam_width);
@@ -145,31 +150,31 @@ mod tests {
         let nodes = vec![
             // 0: Pos 0.0, Neighbors: [1]
             Node {
-                payload: vec![0.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([0.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![1]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 10.0, Neighbors: [2]
             Node {
-                payload: vec![10.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([10.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![2]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 2: Pos 20.0, Neighbors: [1, 3]
             Node {
-                payload: vec![20.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([20.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![1, 3]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 3: Pos 30.0, Neighbors: [4]
             Node {
-                payload: vec![30.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([30.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![4]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 4: Pos 40.0, Neighbors: []
             Node {
-                payload: vec![40.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([40.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
@@ -181,7 +186,7 @@ mod tests {
     #[test]
     fn test_basic_search_path() {
         let graph = setup_simple_graph();
-        let query = vec![11.0; 8];
+        let query = vec![AlignedBlock::new([11.0; 8])];
         let k = 2;
         let beam_width = 3;
 
@@ -223,26 +228,26 @@ mod tests {
         let nodes = vec![
             // 0: Pos 100.0, Dist 10000
             Node {
-                payload: vec![100.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([100.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![2]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 0.0, Dist 1. (BEST of all)
             Node {
-                payload: vec![0.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([0.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![0]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 2: Pos 5.0, Dist 36. (Worst starting point)
             Node {
-                payload: vec![5.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([5.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![1]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
         // Start points: 0, 2
         let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 3, Some(42)), true);
-        let query = vec![1.0; 8];
+        let query = vec![AlignedBlock::new([1.0; 8])];
         let k = 2;
         let beam_width = 3;
 
@@ -266,43 +271,43 @@ mod tests {
         let nodes: Vec<Node<UnboundedNeighborSet>> = vec![
             // 0: Pos 10.0, Dist 100. N: [1, 5]. (Start point)
             Node {
-                payload: vec![10.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([10.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![1, 5]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 8.0, Dist 64. N: [2].
             Node {
-                payload: vec![8.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([8.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![2]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 2: Pos 5.0, Dist 25. N: [3].
             Node {
-                payload: vec![5.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([5.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![3]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 3: Pos 2.0, Dist 4. N: [4].
             Node {
-                payload: vec![2.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([2.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![4]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 4: Pos 1.0, Dist 1. N: []. (The globally BEST node)
             Node {
-                payload: vec![1.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([1.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 5: Pos 100.0, Dist 10000. N: []. (A distant dead end)
             Node {
-                payload: vec![100.0; 8].into_boxed_slice(),
+                payload: vec![AlignedBlock::new([100.0; 8])].into_boxed_slice(),
                 neighbors: FixedSet::new(vec![]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
         let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 5, Some(42)), true);
-        let query = vec![0.0; 8];
+        let query = vec![AlignedBlock::new([0.0; 8])];
         let k = 1;
         let beam_width = 2; // Tight beam width forces early pruning
 

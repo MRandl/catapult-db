@@ -1,20 +1,29 @@
+use crate::numerics::{SIMD_LANECOUNT, aligned_block::AlignedBlock};
+
 pub trait Queries {
     fn load_from_npy(path: &str) -> Self;
 }
 
-impl Queries for Vec<Vec<f32>> {
+impl Queries for Vec<Vec<AlignedBlock>> {
     fn load_from_npy(path: &str) -> Self {
         let bytes = std::fs::read(path).unwrap();
         let npy = npyz::NpyFile::new(&bytes[..]).unwrap();
         assert!(npy.shape().len() == 2);
         let (d1, d2) = (npy.shape()[0] as usize, npy.shape()[1] as usize);
 
+        assert!(d2.is_multiple_of(SIMD_LANECOUNT));
+
         let mut iter = npy.data::<f32>().unwrap();
         let mut result = Vec::with_capacity(d1);
         for _ in 0..d1 {
-            let mut row = Vec::with_capacity(d2);
-            for _ in 0..d2 {
-                row.push(iter.next().unwrap().unwrap());
+            let d2_capacity = d2 / SIMD_LANECOUNT;
+            let mut row = Vec::with_capacity(d2_capacity);
+            for _ in 0..d2_capacity {
+                let mut buffer = [0.0; SIMD_LANECOUNT];
+                for entry in buffer.iter_mut() {
+                    *entry = iter.next().unwrap().unwrap();
+                }
+                row.push(AlignedBlock::new(buffer));
             }
             result.push(row);
         }
@@ -29,7 +38,7 @@ mod tests {
 
     #[test]
     fn test_load_4vecs() {
-        let vectors = Vec::<Vec<f32>>::load_from_npy("test_index/4vecs/4vecs.npy");
+        let vectors = Vec::<Vec<AlignedBlock>>::load_from_npy("test_index/4vecs/4vecs.npy");
 
         println!("Loaded {} vectors", vectors.len());
         for (i, vec) in vectors.iter().enumerate() {

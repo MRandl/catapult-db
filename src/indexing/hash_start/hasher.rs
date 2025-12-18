@@ -2,12 +2,13 @@ use rand::rngs::{StdRng, ThreadRng};
 use rand::{Rng, SeedableRng, rng};
 use rand_distr::StandardNormal;
 
+use crate::numerics::aligned_block::AlignedBlock;
 use crate::numerics::{SIMD_LANECOUNT, VectorLike};
 
 pub struct SimilarityHasher {
     stored_vectors_dim: usize,
     /// random hyperplane normals
-    projections: Vec<Vec<f32>>,
+    projections: Vec<Vec<AlignedBlock>>,
 }
 
 impl SimilarityHasher {
@@ -32,10 +33,16 @@ impl SimilarityHasher {
         );
 
         let mut gaussian_iter = rng.sample_iter(StandardNormal);
-        let projections: Vec<Vec<f32>> = (0..num_hash)
+        let projections: Vec<Vec<AlignedBlock>> = (0..num_hash)
             .map(|_| {
-                (0..stored_vectors_dim)
-                    .map(|_| gaussian_iter.next().unwrap())
+                (0..stored_vectors_dim / SIMD_LANECOUNT)
+                    .map(|_| {
+                        let mut block = [0.0; SIMD_LANECOUNT];
+                        for i in 0..SIMD_LANECOUNT {
+                            block[i] = gaussian_iter.next().unwrap();
+                        }
+                        AlignedBlock::new(block)
+                    })
                     .collect()
             })
             .collect();
@@ -47,9 +54,9 @@ impl SimilarityHasher {
     }
 
     /// Hashes `vector` to a `k`-length binary signature.
-    pub fn hash(&self, vector: &[f32]) -> Vec<bool> {
+    pub fn hash(&self, vector: &[AlignedBlock]) -> Vec<bool> {
         debug_assert!(
-            vector.len() == self.stored_vectors_dim,
+            vector.len() == self.stored_vectors_dim / SIMD_LANECOUNT,
             "input vector has wrong dimension"
         );
         self.projections
@@ -61,9 +68,10 @@ impl SimilarityHasher {
             .collect()
     }
 
-    pub fn hash_int(&self, vector: &[f32]) -> u64 {
-        assert!(
-            vector.len() == self.stored_vectors_dim,
+    pub fn hash_int(&self, vector: &[AlignedBlock]) -> u64 {
+        assert_eq!(
+            vector.len(),
+            self.stored_vectors_dim / SIMD_LANECOUNT,
             "input vector has wrong dimension"
         );
         assert!(self.projections.len() <= u64::BITS as usize); // less than 64 planes to fit signature in u64
@@ -109,7 +117,7 @@ mod tests {
     #[test]
     fn test_hash_consistency_same_input() {
         let hasher = SimilarityHasher::new_seeded(16, SIMD_LANECOUNT, 123);
-        let vec = vec![1.0; SIMD_LANECOUNT];
+        let vec = vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])];
         let hash1 = hasher.hash(&vec);
         let hash2 = hasher.hash(&vec);
         assert_eq!(hash1, hash2, "Hash must be consistent for same input");
@@ -119,10 +127,10 @@ mod tests {
     fn test_hash_difference_on_orthogonal_vectors() {
         let dim = SIMD_LANECOUNT;
         let hasher = SimilarityHasher::new_seeded(32, dim, 999);
-        let mut v1 = vec![0.0; dim];
-        let mut v2 = vec![0.0; dim];
-        v1[0] = 1.0; // Unit vector along x
-        v2[1] = 1.0; // Unit vector along y
+        let mut v1 = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])];
+        let mut v2 = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])];
+        v1[0].data[0] = 1.0; // Unit vector along x
+        v2[0].data[1] = 1.0; // Unit vector along y
         let h1 = hasher.hash(&v1);
         let h2 = hasher.hash(&v2);
 
@@ -139,12 +147,12 @@ mod tests {
         let hasher = SimilarityHasher {
             stored_vectors_dim: SIMD_LANECOUNT,
             projections: vec![
-                vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                vec![AlignedBlock::new([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
+                vec![AlignedBlock::new([0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
             ], // x-axis and y-axis projections
         };
 
-        let input = vec![2.0, -3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let input = vec![AlignedBlock::new([2.0, -3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])];
         let result = hasher.hash(&input);
 
         // Expect: dot([2,-3], [1,0]) = 2 → true

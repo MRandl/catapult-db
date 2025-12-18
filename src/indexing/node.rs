@@ -1,11 +1,14 @@
 use std::{fmt::Debug, sync::RwLock};
 
-use crate::indexing::eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet};
+use crate::{
+    indexing::eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet},
+    numerics::aligned_block::AlignedBlock,
+};
 
 pub struct Node<T: CatapultNeighborSet> {
     pub neighbors: FixedSet,
     pub catapults: RwLock<T>,
-    pub payload: Box<[f32]>,
+    pub payload: Box<[AlignedBlock]>,
 }
 
 impl<T: CatapultNeighborSet + Debug> Debug for Node<T> {

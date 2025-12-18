@@ -9,10 +9,10 @@
 /// use catapult::candidates::BitSet;
 ///
 /// let mut bs = BitSet::new(10);
-/// assert!(!bs.get_bit(3));
+/// assert!(!bs.get(3));
 ///
-/// bs.set_bit(3);
-/// assert!(bs.get_bit(3));
+/// bs.set(3);
+/// assert!(bs.get(3));
 /// ```
 pub struct BitSet {
     /*private*/ buffer: Box<[u8]>,
@@ -28,7 +28,7 @@ impl BitSet {
     /// use catapult::candidates::BitSet;
     ///
     /// let bs = BitSet::new(12);
-    /// assert!(!bs.get_bit(0));
+    /// assert!(!bs.get(0));
     /// ```
     pub fn new(capacity: usize) -> Self {
         let bytes_needed: usize = capacity.div_ceil(8);
@@ -49,10 +49,10 @@ impl BitSet {
     /// use catapult::candidates::BitSet;
     ///
     /// let mut bs = BitSet::new(4);
-    /// bs.set_bit(2);
-    /// assert!(bs.get_bit(2));
+    /// bs.set(2);
+    /// assert!(bs.get(2));
     /// ```
-    pub fn set_bit(&mut self, index: usize) {
+    pub fn set(&mut self, index: usize) {
         assert!(index < self.capacity);
 
         let byte_index = index / 8;
@@ -72,11 +72,11 @@ impl BitSet {
     /// use catapult::candidates::BitSet;
     ///
     /// let mut bs = BitSet::new(4);
-    /// bs.set_bit(1);
-    /// assert!(bs.get_bit(1));
-    /// assert!(!bs.get_bit(0));
+    /// bs.set(1);
+    /// assert!(bs.get(1));
+    /// assert!(!bs.get(0));
     /// ```
-    pub fn get_bit(&self, index: usize) -> bool {
+    pub fn get(&self, index: usize) -> bool {
         assert!(index < self.capacity);
 
         let byte_index = index / 8;
@@ -101,12 +101,7 @@ mod tests {
         for cap in [1usize, 7, 8, 9, 16, 31, 32, 33] {
             let bs = BitSet::new(cap);
             for i in 0..cap {
-                assert!(
-                    !bs.get_bit(i),
-                    "bit {} should start cleared for cap {}",
-                    i,
-                    cap
-                );
+                assert!(!bs.get(i), "bit {} should start cleared for cap {}", i, cap);
             }
         }
     }
@@ -119,8 +114,8 @@ mod tests {
         // Set a bunch of positions, including boundaries
         let to_set = [0usize, 1, 7, 8, 15, 16, 31, 32, 39];
         for &i in &to_set {
-            bs.set_bit(i);
-            assert!(bs.get_bit(i), "bit {} should be set", i);
+            bs.set(i);
+            assert!(bs.get(i), "bit {} should be set", i);
         }
 
         // Verify every position: set ones are 1, others are 0.
@@ -131,12 +126,12 @@ mod tests {
 
         for i in 0..cap {
             assert_eq!(
-                bs.get_bit(i),
+                bs.get(i),
                 expected[i],
                 "bit {} expected {}, found {}",
                 i,
                 expected[i],
-                bs.get_bit(i)
+                bs.get(i)
             );
         }
     }
@@ -144,13 +139,13 @@ mod tests {
     #[test]
     fn idempotent_sets() {
         let mut bs = BitSet::new(10);
-        bs.set_bit(3);
-        bs.set_bit(3);
-        assert!(bs.get_bit(3));
+        bs.set(3);
+        bs.set(3);
+        assert!(bs.get(3));
         // Other bits unaffected
         for i in 0..10 {
             if i != 3 {
-                assert!(!bs.get_bit(i));
+                assert!(!bs.get(i));
             }
         }
     }
@@ -159,11 +154,11 @@ mod tests {
     fn non_multiple_of_8_capacity_last_bit_works() {
         // Capacity 10 => 2 bytes allocated, last valid index = 9
         let mut bs = BitSet::new(10);
-        bs.set_bit(9);
-        assert!(bs.get_bit(9));
+        bs.set(9);
+        assert!(bs.get(9));
         // Earlier bits still cleared
         for i in 0..9 {
-            assert!(!bs.get_bit(i));
+            assert!(!bs.get(i));
         }
     }
 
@@ -174,19 +169,19 @@ mod tests {
 
         // Sparse: every 3rd bit
         for i in (0..cap).step_by(3) {
-            bs.set_bit(i);
+            bs.set(i);
         }
         for i in 0..cap {
             let expected = i % 3 == 0;
-            assert_eq!(bs.get_bit(i), expected, "mismatch at {}", i);
+            assert_eq!(bs.get(i), expected, "mismatch at {}", i);
         }
 
         // Overwrite to dense: now set all bits
         for i in 0..cap {
-            bs.set_bit(i);
+            bs.set(i);
         }
         for i in 0..cap {
-            assert!(bs.get_bit(i));
+            assert!(bs.get(i));
         }
     }
 
@@ -195,9 +190,9 @@ mod tests {
         for cap in [1usize, 8, 9, 17, 31, 32, 33] {
             let last = cap - 1;
             let mut bs = BitSet::new(cap);
-            bs.set_bit(last);
+            bs.set(last);
             assert!(
-                bs.get_bit(last),
+                bs.get(last),
                 "last bit {} should be set for cap {}",
                 last,
                 cap
@@ -210,6 +205,6 @@ mod tests {
     fn set_bit_out_of_bounds_panics_in_debug() {
         // capacity = 10 → valid indices are 0..9
         let mut bs = BitSet::new(10);
-        bs.set_bit(10); // invalid
+        bs.set(10); // invalid
     }
 }
