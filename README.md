@@ -2,12 +2,6 @@
 
 Yet another fast approximate nearest neighbor (ANN) search library in Rust.
 
-## Features
-
-- **Graph-based indexing**: Adjacency graph structure for ANN search using a mutable graph
-- **High-performance vector operations**: L2 distance, dot product, normalization
-- **Thread-safe indexing**: Concurrent indexing and search operations
-
 ## Requirements
 
 - Rust nightly (uses `#![feature(portable_simd)]`)
