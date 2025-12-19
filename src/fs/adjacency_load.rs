@@ -3,7 +3,7 @@ use crate::{
         eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet},
         node::{self, Node},
     },
-    numerics::{SIMD_LANECOUNT, aligned_block::AlignedBlock},
+    numerics::{AlignedBlock, SIMD_LANECOUNT},
 };
 
 use crate::indexing::adjacency_graph::AdjacencyGraph;

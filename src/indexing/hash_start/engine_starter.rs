@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use crate::indexing::SimilarityHasher;
-use crate::numerics::aligned_block::AlignedBlock;
+use crate::numerics::AlignedBlock;
 
 pub struct EngineStarter {
     hasher: SimilarityHasher,

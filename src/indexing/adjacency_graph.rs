@@ -6,7 +6,7 @@ use crate::{
         engine_starter::EngineStarter, eviction::catapult_neighbor_set::CatapultNeighborSet,
         node::Node,
     },
-    numerics::{VectorLike, aligned_block::AlignedBlock},
+    numerics::{AlignedBlock, VectorLike},
 };
 
 /// In-memory adjacency graph used for approximate nearest-neighbor (ANN) search.

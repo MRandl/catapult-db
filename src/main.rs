@@ -1,8 +1,8 @@
 use catapult::indexing::adjacency_graph::AdjacencyGraph;
 use catapult::indexing::engine_starter::EngineStarter;
 use catapult::indexing::eviction::FifoSet;
+use catapult::numerics::AlignedBlock;
 use catapult::numerics::SIMD_LANECOUNT;
-use catapult::numerics::aligned_block::AlignedBlock;
 use clap::Parser;
 use std::hint::black_box;
 use std::path::PathBuf;

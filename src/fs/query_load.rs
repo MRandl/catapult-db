@@ -1,4 +1,4 @@
-use crate::numerics::{SIMD_LANECOUNT, aligned_block::AlignedBlock};
+use crate::numerics::{AlignedBlock, SIMD_LANECOUNT};
 
 pub trait Queries {
     fn load_from_npy(path: &str) -> Self;

@@ -2,7 +2,7 @@ use std::{fmt::Debug, sync::RwLock};
 
 use crate::{
     indexing::eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet},
-    numerics::aligned_block::AlignedBlock,
+    numerics::AlignedBlock,
 };
 
 pub struct Node<T: CatapultNeighborSet> {

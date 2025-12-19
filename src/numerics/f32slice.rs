@@ -1,8 +1,7 @@
 use std::simd::{Simd, num::SimdFloat};
 
-use crate::numerics::aligned_block::AlignedBlock;
+use crate::numerics::aligned_block::{AlignedBlock, SIMD_LANECOUNT};
 
-pub const SIMD_LANECOUNT: usize = 8;
 type SimdF32 = Simd<f32, SIMD_LANECOUNT>;
 
 /// A trait for vector‐like slices of `f32`, supporting common linear‐algebra
@@ -105,10 +104,6 @@ mod tests {
     fn approx_eq(a: f32, b: f32, eps: f32) -> bool {
         let diff = (a - b).abs();
         diff < eps
-    }
-
-    fn scalar_dot(x: &[f32], y: &[f32]) -> f32 {
-        x.iter().zip(y).map(|(a, b)| a * b).sum()
     }
 
     fn scalar_l2_sq(x: &[AlignedBlock], y: &[AlignedBlock]) -> f32 {

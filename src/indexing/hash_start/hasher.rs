@@ -2,8 +2,7 @@ use rand::rngs::{StdRng, ThreadRng};
 use rand::{Rng, SeedableRng, rng};
 use rand_distr::StandardNormal;
 
-use crate::numerics::aligned_block::AlignedBlock;
-use crate::numerics::{SIMD_LANECOUNT, VectorLike};
+use crate::numerics::{AlignedBlock, SIMD_LANECOUNT, VectorLike};
 
 pub struct SimilarityHasher {
     stored_vectors_dim: usize,
