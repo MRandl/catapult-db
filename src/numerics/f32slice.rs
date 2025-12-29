@@ -52,7 +52,9 @@ impl VectorLike for [AlignedBlock] {
         let othr_chunks = othr.iter();
 
         for (&slice_self, &slice_othr) in self_chunks.zip(othr_chunks) {
-            //TODO: issue t0 cache prefetch calls. preferably portable intrinsics
+            // prefetch intrinsics didn't prove to be crazy useful here.
+            // i'll just remove them for now. Maybe when the final DB is built,
+            // we can benchmark this again.
             let f32simd_slf = SimdF32::from_array(slice_self.data);
             let f32simd_oth = SimdF32::from_array(slice_othr.data);
             let diff = f32simd_slf - f32simd_oth;
