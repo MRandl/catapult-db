@@ -138,10 +138,6 @@ mod tests {
     use super::*;
     use std::sync::RwLock;
 
-    // NOTE: For the tests to compile and run, the following structs MUST be defined in
-    // the parent scope or imported:
-    // Distance, CandidateEntry, SmallestK, BitSet, Vector, Node, EngineStarter, Stats, and VectorLike trait.
-
     // A simple graph:
     // Nodes: 0 (pos 0), 1 (pos 10), 2 (pos 20), 3 (pos 30), 4 (pos 40)
     // Edges: 0 -> 1 -> 2 -> 3 -> 4
