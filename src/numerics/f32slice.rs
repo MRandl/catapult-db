@@ -136,10 +136,10 @@ mod tests {
 
     #[test]
     fn l2_is_sqrt_of_l2_squared() {
-        let x = vec![AlignedBlock::new([
+        let x = [AlignedBlock::new([
             1.0, 2.0, 3.0, 4.0, -1.0, -2.0, 0.5, 0.25,
         ])];
-        let y = vec![AlignedBlock::new([0.0, 1.0, 1.5, 4.0, 1.0, 0.0, 0.0, 2.0])];
+        let y = [AlignedBlock::new([0.0, 1.0, 1.5, 4.0, 1.0, 0.0, 0.0, 2.0])];
 
         let d2 = x.l2_squared(&y);
         let d = x.l2(&y);
