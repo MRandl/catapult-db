@@ -31,9 +31,10 @@ impl EngineStarter {
         if let Some(starters) = self.cached_starters.read().unwrap().get(&signature) {
             starters.clone()
         } else {
-            let seed =
-                (query[0].data[0].to_bits() as u64) << 32 | query[0].data[1].to_bits() as u64;
-
+            let seed = signature;
+            // seeding the rand with the signature. This prevents a scheduling shenanigan where having two
+            // threads trying to set this without seeding would make the starter points inconsistent across runs,
+            // technically a race condition (benign).
             let mut rng = StdRng::seed_from_u64(seed);
             let indices = sample(&mut rng, self.max_len, k).into_vec();
             self.cached_starters
