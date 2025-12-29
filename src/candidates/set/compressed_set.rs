@@ -1,6 +1,7 @@
 use crate::candidates::set::{
     integer_map::IntegerMap,
     page::{PAGE_SIZE_BITS, Page},
+    visitor_set::VisitorSet,
 };
 
 #[derive(Default)]
@@ -14,8 +15,10 @@ impl CompressedBitset {
             pages: IntegerMap::default(),
         }
     }
+}
 
-    pub fn set(&mut self, index: usize) {
+impl VisitorSet for CompressedBitset {
+    fn set(&mut self, index: usize) {
         let page_idx = index / PAGE_SIZE_BITS;
         let bit_offset = index % PAGE_SIZE_BITS;
 
@@ -28,7 +31,7 @@ impl CompressedBitset {
         page.set(bit_offset);
     }
 
-    pub fn get(&self, index: usize) -> bool {
+    fn get(&self, index: usize) -> bool {
         let page_idx = index / PAGE_SIZE_BITS;
         let bit_offset = index % PAGE_SIZE_BITS;
 

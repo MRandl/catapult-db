@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use crate::{
-    candidates::{CandidateEntry, CompressedBitset, SmallestK},
+    candidates::{CandidateEntry, CompressedBitset, SmallestK, VisitorSet},
     indexing::{
         engine_starter::EngineStarter, eviction::catapult_neighbor_set::CatapultNeighborSet,
         node::Node,

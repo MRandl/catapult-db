@@ -1,3 +1,5 @@
+use crate::candidates::VisitorSet;
+
 /// A fixed-capacity set of boolean values packed into a contiguous
 /// buffer of bytes.
 ///
@@ -6,38 +8,40 @@
 /// # Examples
 ///
 /// ```
-/// use catapult::candidates::BitSet;
+/// use catapult::candidates::{UncompressedSet, VisitorSet};
 ///
-/// let mut bs = BitSet::new(10);
+/// let mut bs = UncompressedSet::new(10);
 /// assert!(!bs.get(3));
 ///
 /// bs.set(3);
 /// assert!(bs.get(3));
 /// ```
-pub struct BitSet {
+pub struct UncompressedSet {
     /*private*/ buffer: Box<[u8]>,
     /*private*/ capacity: usize,
 }
 
-impl BitSet {
+impl UncompressedSet {
     /// Constructs a new [`BitSet`] with space for `capacity` bits,
     /// all initialized to zero.
     ///
     /// # Examples
     /// ```
-    /// use catapult::candidates::BitSet;
+    /// use catapult::candidates::{UncompressedSet, VisitorSet};
     ///
-    /// let bs = BitSet::new(12);
+    /// let bs = UncompressedSet::new(12);
     /// assert!(!bs.get(0));
     /// ```
     pub fn new(capacity: usize) -> Self {
         let bytes_needed: usize = capacity.div_ceil(8);
-        BitSet {
+        UncompressedSet {
             buffer: vec![0u8; bytes_needed].into_boxed_slice(),
             capacity,
         }
     }
+}
 
+impl VisitorSet for UncompressedSet {
     /// Sets the bit at the given `index` to `1`.
     ///
     /// # Panics
@@ -46,13 +50,13 @@ impl BitSet {
     ///
     /// # Examples
     /// ```
-    /// use catapult::candidates::BitSet;
+    /// use catapult::candidates::{UncompressedSet, VisitorSet};
     ///
-    /// let mut bs = BitSet::new(4);
+    /// let mut bs = UncompressedSet::new(4);
     /// bs.set(2);
     /// assert!(bs.get(2));
     /// ```
-    pub fn set(&mut self, index: usize) {
+    fn set(&mut self, index: usize) {
         assert!(index < self.capacity);
 
         let byte_index = index / 8;
@@ -69,14 +73,14 @@ impl BitSet {
     ///
     /// # Examples
     /// ```
-    /// use catapult::candidates::BitSet;
+    /// use catapult::candidates::{UncompressedSet, VisitorSet};
     ///
-    /// let mut bs = BitSet::new(4);
+    /// let mut bs = UncompressedSet::new(4);
     /// bs.set(1);
     /// assert!(bs.get(1));
     /// assert!(!bs.get(0));
     /// ```
-    pub fn get(&self, index: usize) -> bool {
+    fn get(&self, index: usize) -> bool {
         assert!(index < self.capacity);
 
         let byte_index = index / 8;
@@ -93,13 +97,13 @@ mod tests {
     #[test]
     fn new_zero_capacity_constructs() {
         // Just ensure it doesn't panic.
-        let _bs = BitSet::new(0);
+        let _bs = UncompressedSet::new(0);
     }
 
     #[test]
     fn all_bits_start_cleared() {
         for cap in [1usize, 7, 8, 9, 16, 31, 32, 33] {
-            let bs = BitSet::new(cap);
+            let bs = UncompressedSet::new(cap);
             for i in 0..cap {
                 assert!(!bs.get(i), "bit {} should start cleared for cap {}", i, cap);
             }
@@ -109,7 +113,7 @@ mod tests {
     #[test]
     fn set_and_get_single_bits_across_byte_boundaries() {
         let cap = 40; // >= 5 bytes
-        let mut bs = BitSet::new(cap);
+        let mut bs = UncompressedSet::new(cap);
 
         // Set a bunch of positions, including boundaries
         let to_set = [0usize, 1, 7, 8, 15, 16, 31, 32, 39];
@@ -138,7 +142,7 @@ mod tests {
 
     #[test]
     fn idempotent_sets() {
-        let mut bs = BitSet::new(10);
+        let mut bs = UncompressedSet::new(10);
         bs.set(3);
         bs.set(3);
         assert!(bs.get(3));
@@ -153,7 +157,7 @@ mod tests {
     #[test]
     fn non_multiple_of_8_capacity_last_bit_works() {
         // Capacity 10 => 2 bytes allocated, last valid index = 9
-        let mut bs = BitSet::new(10);
+        let mut bs = UncompressedSet::new(10);
         bs.set(9);
         assert!(bs.get(9));
         // Earlier bits still cleared
@@ -165,7 +169,7 @@ mod tests {
     #[test]
     fn dense_and_sparse_patterns() {
         let cap = 64;
-        let mut bs = BitSet::new(cap);
+        let mut bs = UncompressedSet::new(cap);
 
         // Sparse: every 3rd bit
         for i in (0..cap).step_by(3) {
@@ -189,7 +193,7 @@ mod tests {
     fn last_index_is_valid() {
         for cap in [1usize, 8, 9, 17, 31, 32, 33] {
             let last = cap - 1;
-            let mut bs = BitSet::new(cap);
+            let mut bs = UncompressedSet::new(cap);
             bs.set(last);
             assert!(
                 bs.get(last),
@@ -204,7 +208,7 @@ mod tests {
     #[should_panic]
     fn set_bit_out_of_bounds_panics_in_debug() {
         // capacity = 10 → valid indices are 0..9
-        let mut bs = BitSet::new(10);
+        let mut bs = UncompressedSet::new(10);
         bs.set(10); // invalid
     }
 }

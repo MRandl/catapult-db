@@ -4,6 +4,7 @@ mod set;
 mod smallest_k;
 
 pub use candidate_entry::*;
-pub use set::bitset::*;
 pub use set::compressed_set::*;
+pub use set::uncompressed_set::*;
+pub use set::visitor_set::*;
 pub use smallest_k::*;
