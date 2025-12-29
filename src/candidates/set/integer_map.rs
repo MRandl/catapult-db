@@ -30,6 +30,8 @@ pub type IntegerMap<V> = HashMap<usize, V, BuildHasherDefault<NoOpHasher>>;
 
 #[cfg(test)]
 mod tests {
+    use core::f64;
+
     use super::*;
 
     #[test]
@@ -144,9 +146,9 @@ mod tests {
     fn integer_map_entry_api() {
         let mut map: IntegerMap<Vec<i32>> = IntegerMap::default();
 
-        map.entry(1).or_insert_with(Vec::new).push(10);
-        map.entry(1).or_insert_with(Vec::new).push(20);
-        map.entry(2).or_insert_with(Vec::new).push(30);
+        map.entry(1).or_default().push(10);
+        map.entry(1).or_default().push(20);
+        map.entry(2).or_default().push(30);
 
         assert_eq!(map.get(&1), Some(&vec![10, 20]));
         assert_eq!(map.get(&2), Some(&vec![30]));
@@ -205,7 +207,7 @@ mod tests {
     fn integer_map_contains_key() {
         let mut map: IntegerMap<f64> = IntegerMap::default();
 
-        map.insert(42, 3.14);
+        map.insert(42, f64::consts::PI);
 
         assert!(map.contains_key(&42));
         assert!(!map.contains_key(&43));

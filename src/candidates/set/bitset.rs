@@ -124,13 +124,13 @@ mod tests {
             expected[i] = true;
         }
 
-        for i in 0..cap {
+        for (i, &groundtruth) in expected.iter().enumerate() {
             assert_eq!(
                 bs.get(i),
-                expected[i],
+                groundtruth,
                 "bit {} expected {}, found {}",
                 i,
-                expected[i],
+                groundtruth,
                 bs.get(i)
             );
         }

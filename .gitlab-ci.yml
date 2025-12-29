@@ -15,7 +15,7 @@ run-tests-debug:
 clippy:
   needs: []
   script:
-    - cargo clippy -- -D warnings
+    - cargo clippy --all-targets -- -D warnings
 
 format-check:
   needs: []
