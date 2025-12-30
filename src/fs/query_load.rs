@@ -4,6 +4,7 @@ pub trait Queries {
     fn load_from_npy(path: &str) -> Self;
 }
 
+//TODO: make it Vec<[AlignedBlock]> for contiguous accesses
 impl Queries for Vec<Vec<AlignedBlock>> {
     fn load_from_npy(path: &str) -> Self {
         let bytes = std::fs::read(path).unwrap();

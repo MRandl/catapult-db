@@ -5,9 +5,9 @@ use crate::{
     numerics::AlignedBlock,
 };
 
-pub struct Node<T: CatapultNeighborSet> {
+pub struct Node<CatapultNeighbors: CatapultNeighborSet> {
     pub neighbors: FixedSet,
-    pub catapults: RwLock<T>,
+    pub catapults: RwLock<CatapultNeighbors>,
     pub payload: Box<[AlignedBlock]>,
 }
 

@@ -83,7 +83,7 @@ fn main() {
 
         for (i, query) in queries.iter().enumerate() {
             let _result =
-                black_box(full_graph.beam_search(query, args.num_neighbors, args.beam_width));
+                black_box(full_graph.beam_search(query, args.num_neighbors, args.beam_width, None));
             reses.push(_result[0].index);
 
             // Print progress every 100k queries
@@ -119,6 +119,7 @@ fn main() {
                             query,
                             args.num_neighbors,
                             args.beam_width,
+                            None,
                         ));
                         local_results.push(_result[0].index);
                     }

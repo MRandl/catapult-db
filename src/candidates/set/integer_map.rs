@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     hash::{BuildHasherDefault, Hasher},
 };
 
@@ -27,6 +27,7 @@ impl Hasher for NoOpHasher {
 }
 
 pub type IntegerMap<V> = HashMap<usize, V, BuildHasherDefault<NoOpHasher>>;
+pub type IntegerSet = HashSet<usize, BuildHasherDefault<NoOpHasher>>;
 
 #[cfg(test)]
 mod tests {

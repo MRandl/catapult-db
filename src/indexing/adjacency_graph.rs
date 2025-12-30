@@ -62,6 +62,7 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
         query: &[AlignedBlock],
         k: usize,
         beam_width: usize,
+        level: Option<u32>,
     ) -> Vec<CandidateEntry> {
         assert!(beam_width >= k);
 
@@ -95,7 +96,7 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
             let candidate_catapults = &best_candidate_node.catapults.read().unwrap();
 
             for &neighbor in candidate_regular_neighbors
-                .to_vec()
+                .to_vec(level)
                 .iter()
                 .chain(&candidate_catapults.to_vec())
                 .unique()
@@ -188,7 +189,7 @@ mod tests {
 
         // Distances: 0(121), 1(1), 2(81), 3(361), 4(841)
 
-        let results = graph.beam_search(&query, k, beam_width);
+        let results = graph.beam_search(&query, k, beam_width, None);
 
         // Final candidates (in order of distance): 1 (1), 2 (81), 0 (121)
         // Top K=2 results: [1, 2]
@@ -204,7 +205,7 @@ mod tests {
                 .adjacency
                 .iter()
                 .map(|n| {
-                    n.catapults.read().unwrap().to_vec().len() + n.neighbors.to_vec().len()
+                    n.catapults.read().unwrap().to_vec().len() + n.neighbors.to_vec(None).len()
                 })
                 .sum::<usize>(),
             6
@@ -213,7 +214,7 @@ mod tests {
             graph
                 .adjacency
                 .iter()
-                .map(|n| { n.neighbors.to_vec().len() })
+                .map(|n| { n.neighbors.to_vec(None).len() })
                 .sum::<usize>(),
             5
         );
@@ -247,7 +248,7 @@ mod tests {
         let k = 2;
         let beam_width = 3;
 
-        let results = graph.beam_search(&query, k, beam_width);
+        let results = graph.beam_search(&query, k, beam_width, None);
         println!(
             "Top K={} results: {:?}",
             k,
@@ -307,7 +308,7 @@ mod tests {
         let k = 1;
         let beam_width = 2; // Tight beam width forces early pruning
 
-        let results = graph.beam_search(&query, k, beam_width);
+        let results = graph.beam_search(&query, k, beam_width, None);
 
         // The globally best result (Node 4) must be found and returned.
         assert_eq!(results.len(), k);
