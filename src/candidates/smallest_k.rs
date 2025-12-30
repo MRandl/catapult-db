@@ -89,7 +89,7 @@ mod tests {
 
     fn contents_sorted(sk: &SmallestK) -> Vec<CandidateEntry> {
         // Access via clone; sorts ascending.
-        let mut ret = sk.members.iter().cloned().collect::<Vec<_>>();
+        let mut ret = sk.members.to_vec();
         ret.sort();
         ret
     }
