@@ -1,7 +1,5 @@
-use itertools::Itertools;
-
 use crate::{
-    candidates::{CandidateEntry, CompressedBitset, SmallestK, VisitorSet},
+    candidates::{CandidateEntry, CompressedBitset, SmallestKCandidates, VisitorSet},
     indexing::{
         engine_starter::EngineStarter, eviction::catapult_neighbor_set::CatapultNeighborSet,
         node::Node,
@@ -35,20 +33,37 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
         }
     }
 
-    /// Performs a best-first beam search from a single entry point.
+    fn compute_distances(&self, indices: &[usize], query: &[AlignedBlock]) -> Vec<CandidateEntry> {
+        indices
+            .into_iter()
+            .map(|&index| {
+                let starting_point = &self.adjacency[index];
+                let starting_score = starting_point.payload.l2_squared(query);
+
+                CandidateEntry {
+                    distance: starting_score.into(),
+                    index: index,
+                }
+            })
+            .collect()
+    }
+
+    /// Performs a best-first beam search from an LSH-selected set of entry points.
     ///
     /// The method maintains a candidate set of size at most `beam_width`
-    /// containing the closest seen nodes (by squared L2). At each step it
+    /// containing the closest seen nodes (by L2). At each step it
     /// expands the closest not-yet-visited node from that set, inserts all of
     /// its neighbors into the candidate set (subject to the beam capacity),
     /// marks the expanded node visited, and repeats until no unvisited
     /// candidates remain.
+    ///
     ///
     /// # Parameters
     /// - `query`: Target vector.
     /// - `k`: Number of final nearest neighbors desired. **Note:** currently only
     ///   used for the assertion `beam_width >= k` (see “Issues” below).
     /// - `beam_width`: Maximum size of the maintained candidate set.
+    /// - `level`: The HNSW layer to use, if any. Should be None for non-HNSW searches.
     ///
     /// # Returns
     /// The `k` indices (and their corresponding distances) that are closest
@@ -66,21 +81,15 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
     ) -> Vec<CandidateEntry> {
         assert!(beam_width >= k);
 
-        let mut candidates: SmallestK = SmallestK::new(beam_width);
+        let mut candidates: SmallestKCandidates = SmallestKCandidates::new(beam_width);
         let mut visited = CompressedBitset::new();
 
         // find a few starting points for the beam call, using LSH
         let starting_indices = self.starter.select_starting_points(query, beam_width);
-        for starting_index in starting_indices {
-            let starting_point = &self.adjacency[starting_index];
-            let starting_score = starting_point.payload.l2_squared(query);
+        let starting_candidates = self.compute_distances(&starting_indices, query);
+        candidates.insert_batch(&starting_candidates);
 
-            candidates.insert(CandidateEntry {
-                distance: starting_score.into(),
-                index: starting_index,
-            });
-        }
-
+        // among the LSH-suggested entry points, one of them is 'the best'. Let's identify it.
         let initial_best_node = candidates
             .iter()
             .min()
@@ -89,27 +98,25 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
 
         let mut best_index_in_candidates: Option<usize> = Some(initial_best_node);
 
+        // while we have some node on which to expand (at first, the best LSH entry point),
+        // we keep expanding it (i.e. looking at its neighbors for better guesses)
         while let Some(best_candidate_index) = best_index_in_candidates {
             let best_candidate_node = &self.adjacency[best_candidate_index];
 
-            let candidate_regular_neighbors = &best_candidate_node.neighbors;
-            let candidate_catapults = &best_candidate_node.catapults.read().unwrap();
+            // identify the neighbors and catapult landing points of our current best guess
+            let regular_neighbors = &best_candidate_node.neighbors.to_box(level);
+            let catapult_landings = &best_candidate_node.catapults.read().unwrap().to_vec();
 
-            for &neighbor in candidate_regular_neighbors
-                .to_box(level)
-                .iter()
-                .chain(&candidate_catapults.to_vec())
-                .unique()
-            {
-                let neighbor_node = &self.adjacency[neighbor];
-                let neighbor_distance = neighbor_node.payload.l2_squared(query);
-                candidates.insert(CandidateEntry {
-                    distance: neighbor_distance.into(),
-                    index: neighbor,
-                });
-            }
+            // all of these guys become candidates for expansion. if we have too many candidates
+            // (beam width parameter), the `candidates` data structure takes care of removing the
+            // worst ones.
+            candidates.insert_batch(&self.compute_distances(regular_neighbors, query));
+            candidates.insert_batch(&self.compute_distances(catapult_landings, query));
 
+            // mark our current node as visited (not to be expanded again)
             visited.set(best_candidate_index);
+
+            // and find some other guy to expand, if possible. If not, we call it a day and return our best guesses.
             best_index_in_candidates = candidates
                 .iter()
                 .filter(|&elem| !visited.get(elem.index))
@@ -117,9 +124,11 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
                 .map(|e| e.index)
         }
 
+        // we have beam_width neighbors, we only need k so we need to rerank
         let mut candidate_vec = candidates.into_iter().collect::<Vec<_>>();
         candidate_vec.sort();
 
+        // just before returning, add the catapult if we are in catapult mode
         if self.catapults {
             self.adjacency[initial_best_node]
                 .catapults
@@ -128,6 +137,7 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
                 .insert(candidate_vec[0].index);
         }
 
+        // and return the best k, job done :)
         candidate_vec.into_iter().take(k).collect()
     }
 }
