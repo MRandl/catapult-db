@@ -35,14 +35,14 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
 
     fn compute_distances(&self, indices: &[usize], query: &[AlignedBlock]) -> Vec<CandidateEntry> {
         indices
-            .into_iter()
+            .iter()
             .map(|&index| {
                 let starting_point = &self.adjacency[index];
                 let starting_score = starting_point.payload.l2_squared(query);
 
                 CandidateEntry {
                     distance: starting_score.into(),
-                    index: index,
+                    index,
                 }
             })
             .collect()

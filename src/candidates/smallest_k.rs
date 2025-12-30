@@ -236,7 +236,7 @@ mod tests {
         for i in 0..100 {
             let dist = rng.random_range(0.0..1000.0);
             let e = entry(dist, i);
-            sk.insert_batch(&[e.clone()]);
+            sk.insert_batch(std::slice::from_ref(&e));
             all_entries.push(e);
         }
 
