@@ -38,11 +38,6 @@ impl SmallestK {
         }
     }
 
-    /// Returns the number of elements currently retained (`<= capacity`).
-    pub fn len(&self) -> usize {
-        self.members.len()
-    }
-
     /// Inserts `item`, possibly evicting the current threshold if `item` is strictly smaller.
     ///
     /// Equal items to the threshold are dropped when full.
@@ -108,7 +103,7 @@ mod tests {
                 index: x,
             });
         }
-        assert_eq!(sk.len(), 3);
+        assert_eq!(sk.members.len(), 3);
         assert_eq!(
             contents_sorted(&sk)
                 .iter()
@@ -139,7 +134,7 @@ mod tests {
         for i in (1..=10).rev() {
             sk.insert(entry(i as f32, i));
         }
-        assert_eq!(sk.len(), 3);
+        assert_eq!(sk.members.len(), 3);
         let mut results: Vec<_> = sk.into_iter().map(|c| c.index).collect();
         results.sort();
         assert_eq!(results, vec![1, 2, 3]);
@@ -153,7 +148,11 @@ mod tests {
         sk.insert(entry(1.0, 100));
         sk.insert(entry(2.0, 200));
 
-        assert_eq!(sk.len(), 2, "Should have ignored identical duplicate");
+        assert_eq!(
+            sk.members.len(),
+            2,
+            "Should have ignored identical duplicate"
+        );
     }
 
     #[test]
@@ -166,7 +165,7 @@ mod tests {
 
         // This should be ignored (30.0 > 20.0)
         sk.insert(entry(30.0, 3));
-        assert_eq!(sk.len(), 2);
+        assert_eq!(sk.members.len(), 2);
 
         // This should replace 20.0 (15.0 < 20.0)
         sk.insert(entry(15.0, 4));
@@ -184,7 +183,7 @@ mod tests {
         sk.insert(entry(10.0, 2)); // Replace
         sk.insert(entry(100.0, 3)); // Ignore
 
-        assert_eq!(sk.len(), 1);
+        assert_eq!(sk.members.len(), 1);
         assert_eq!(sk.iter().next().unwrap().index, 2);
     }
 
