@@ -1,9 +1,6 @@
-use std::collections::{
-    HashSet,
-    hash_set::{IntoIter, Iter},
-};
+use std::vec::IntoIter;
 
-use std::hash::Hash;
+use crate::candidates::CandidateEntry;
 
 /// A bounded structure that keeps the *k smallest* elements seen so far,
 /// implemented using `std::collections::HashSet`.
@@ -21,156 +18,81 @@ use std::hash::Hash;
 /// # Complexity
 /// Memory is `O(k)`. Insertion is `O(k)` due to finding the max element, plus `O(1)`
 /// average case for HashSet operations. `peek()` is `O(k)` as it scans for the maximum.
-///
-/// # Example
 /// ```
-/// use catapult::candidates::SmallestK;
-///
-/// let mut sk = SmallestK::new(3);
-/// for x in [10, 1, 7, 3, 9, 2] {
-///     sk.insert(x);
-/// }
-/// // Keeps the three smallest: {1, 2, 3}
-/// assert_eq!(sk.len(), 3);
-/// assert_eq!(sk.peek().copied(), Some(3)); // threshold (max among kept)
-/// ```
-pub struct SmallestK<T> {
-    members: HashSet<T>, //could be a btreeset. maybe evaluate the tradeoff at some point.
+pub struct SmallestK {
+    members: Vec<CandidateEntry>,
     capacity: usize,
 }
 
-impl<T: Ord + Eq + Hash + Clone> SmallestK<T> {
+impl SmallestK {
     /// Creates a new `SmallestK` that retains at most `capacity` elements.
     ///
     /// # Panics
     /// Panics if `capacity == 0`.
     ///
-    /// # Example
-    /// ```
-    /// use catapult::candidates::SmallestK;
-    ///
-    /// let sk = SmallestK::<i32>::new(4);
-    /// assert_eq!(sk.capacity(), 4);
-    /// assert!(sk.is_empty());
-    /// ```
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0);
         SmallestK {
-            members: HashSet::with_capacity(capacity),
+            members: Vec::with_capacity(capacity),
             capacity,
         }
     }
 
     /// Returns the number of elements currently retained (`<= capacity`).
-    ///
-    /// ```
-    /// use catapult::candidates::SmallestK;
-    ///
-    /// let mut sk = SmallestK::new(2);
-    /// sk.insert(5);
-    /// assert_eq!(sk.len(), 1);
-    /// ```
     pub fn len(&self) -> usize {
         self.members.len()
-    }
-
-    /// Returns the configured maximum capacity (k).
-    ///
-    /// ```
-    /// use catapult::candidates::SmallestK;
-    ///
-    /// let sk = SmallestK::<i32>::new(8);
-    /// assert_eq!(sk.capacity(), 8);
-    /// ```
-    pub fn capacity(&self) -> usize {
-        self.capacity
-    }
-
-    /// Returns `true` if no elements are currently retained.
-    ///
-    /// ```
-    /// use catapult::candidates::SmallestK;
-    ///
-    /// let sk = SmallestK::<i32>::new(3);
-    /// assert!(sk.is_empty());
-    /// ```
-    pub fn is_empty(&self) -> bool {
-        self.members.is_empty()
-    }
-
-    /// Returns whether the structure has reached full capacity.
-    pub fn is_full(&self) -> bool {
-        self.members.len() == self.capacity
-    }
-
-    /// Returns a reference to the **largest** element among the retained ones,
-    /// i.e., the current *threshold*.
-    ///
-    /// When full, only new elements strictly smaller than this value will be admitted.
-    ///
-    /// ```
-    /// use catapult::candidates::SmallestK;
-    ///
-    /// let mut sk = SmallestK::new(3);
-    /// for x in [5, 2, 7, 1, 4] { sk.insert(x); }
-    /// // Kept: {1,2,4}; threshold is 4
-    /// assert_eq!(sk.peek().copied(), Some(4));
-    /// ```
-    pub fn peek(&self) -> Option<&T> {
-        self.members.iter().max()
     }
 
     /// Inserts `item`, possibly evicting the current threshold if `item` is strictly smaller.
     ///
     /// Equal items to the threshold are dropped when full.
-    ///
-    /// ```
-    /// use catapult::candidates::SmallestK;
-    ///
-    /// let mut sk = SmallestK::new(2);
-    /// sk.insert(10);
-    /// sk.insert(3);
-    /// sk.insert(5); // dropped (not smaller than threshold 10? threshold is max among kept -> 10)
-    /// assert_eq!(sk.len(), 2);
-    /// ```
-    pub fn insert(&mut self, item: T) {
+    pub fn insert(&mut self, item: CandidateEntry) {
         debug_assert!(self.members.len() <= self.capacity);
         // should be impossible to break this, by construction.
 
-        if self.members.len() < self.capacity {
-            self.members.insert(item);
-        } else {
-            let bound = self
-                .peek()
-                .expect("set is full yet has no elements")
-                .clone();
+        let mut max_index = 0;
 
-            if item < bound {
-                self.members.remove(&bound);
-                self.members.insert(item);
+        // Single pass: find max element index AND check for equality
+        for (i, member) in self.members.iter().enumerate() {
+            if member.index == item.index {
+                return;
+            }
+            if member > &self.members[max_index] {
+                max_index = i;
+            }
+        }
+
+        if self.members.len() < self.capacity {
+            self.members.push(item);
+        } else {
+            // If full, only swap if the new item is strictly smaller than our found max
+            if item < self.members[max_index] {
+                self.members[max_index] = item;
             }
         }
     }
 
-    pub fn iter(&self) -> Iter<'_, T> {
+    pub fn iter(&self) -> std::slice::Iter<'_, CandidateEntry> {
         self.members.iter()
     }
 }
 
-impl<T> IntoIterator for SmallestK<T> {
-    type Item = T;
-    type IntoIter = IntoIter<T>;
+impl IntoIterator for SmallestK {
+    type Item = CandidateEntry;
+    type IntoIter = IntoIter<CandidateEntry>;
 
-    fn into_iter(self) -> IntoIter<T> {
+    fn into_iter(self) -> IntoIter<CandidateEntry> {
         self.members.into_iter()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use rand_distr::num_traits::ToPrimitive;
+
     use super::*;
 
-    fn contents_sorted<T: Ord + Clone>(sk: &SmallestK<T>) -> Vec<T> {
+    fn contents_sorted(sk: &SmallestK) -> Vec<CandidateEntry> {
         // Access via clone; sorts ascending.
         let mut ret = sk.members.iter().cloned().collect::<Vec<_>>();
         ret.sort();
@@ -181,91 +103,126 @@ mod tests {
     fn keeps_k_smallest_basic() {
         let mut sk = SmallestK::new(3);
         for x in 1..=10 {
-            sk.insert(x);
+            sk.insert(CandidateEntry {
+                distance: x.to_f32().unwrap().into(),
+                index: x,
+            });
         }
         assert_eq!(sk.len(), 3);
-        assert_eq!(contents_sorted(&sk), vec![1, 2, 3]);
-        assert_eq!(sk.peek(), Some(&3)); // threshold
-    }
-
-    #[test]
-    fn threshold_behavior_and_replacement() {
-        let mut sk = SmallestK::new(3);
-        for x in [10, 9, 8] {
-            sk.insert(x);
-        }
-        assert_eq!(contents_sorted(&sk), vec![8, 9, 10]);
-        assert_eq!(sk.peek(), Some(&10));
-
-        sk.insert(7);
-        assert_eq!(contents_sorted(&sk), vec![7, 8, 9]);
-        assert_eq!(sk.peek(), Some(&9));
-
-        sk.insert(6);
-        assert_eq!(contents_sorted(&sk), vec![6, 7, 8]);
-        assert_eq!(sk.peek(), Some(&8));
-    }
-
-    #[test]
-    fn rejects_larger_when_full() {
-        let mut sk = SmallestK::new(3);
-        for x in [1, 2, 3] {
-            sk.insert(x);
-        }
-        assert_eq!(contents_sorted(&sk), vec![1, 2, 3]);
-        sk.insert(10);
-        sk.insert(9);
-        assert_eq!(contents_sorted(&sk), vec![1, 2, 3]); // unchanged
-        assert_eq!(sk.peek(), Some(&3));
-    }
-
-    #[test]
-    fn growing_until_full_then_enforcing_policy() {
-        let mut sk = SmallestK::new(4);
-        for x in [7, 3, 9] {
-            sk.insert(x);
-        }
-        assert_eq!(sk.len(), 3);
-        assert_eq!(contents_sorted(&sk), vec![3, 7, 9]);
-        sk.insert(1); // now full
-        assert_eq!(sk.len(), 4);
-        assert_eq!(contents_sorted(&sk), vec![1, 3, 7, 9]);
-
-        // Now apply policy: only < threshold (currently 9) gets in
-        sk.insert(8);
-        assert_eq!(contents_sorted(&sk), vec![1, 3, 7, 8]);
-        sk.insert(100); // rejected
-        assert_eq!(contents_sorted(&sk), vec![1, 3, 7, 8]);
-    }
-
-    #[test]
-    fn deterministic_property_matches_sorted_take_k() {
-        let cap = 50usize;
-        let mut sk = SmallestK::new(cap);
-        let mut all = Vec::with_capacity(10_000);
-
-        // Generate a non-trivial sequence without randomness:
-        // e.g. x_n = (n * 37) mod 10_000  (full period modulo arithmetic progression).
-        let modulus = 10_000i32;
-        let step = 37i32;
-        let mut x = 0i32;
-        for _ in 0..10_000 {
-            all.push(x);
-            sk.insert(x);
-            x = (x + step) % modulus;
-        }
-
-        // Reference: global sort then take k smallest
-        all.sort_unstable();
-        let expected: Vec<_> = all.into_iter().take(cap).collect();
-        assert_eq!(contents_sorted(&sk), expected);
-        assert_eq!(sk.len(), cap);
-        assert_eq!(sk.peek().copied(), expected.last().copied()); // threshold equals k-th smallest
+        assert_eq!(
+            contents_sorted(&sk)
+                .iter()
+                .map(|c| c.index)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
     }
 
     #[test]
     #[should_panic]
     fn zero_capacity_panics() {
-        let _ = SmallestK::<i32>::new(0);
+        let _ = SmallestK::new(0);
+    }
+
+    // Helper to create a CandidateEntry quickly
+    fn entry(dist: f32, idx: usize) -> CandidateEntry {
+        CandidateEntry {
+            distance: dist.into(),
+            index: idx,
+        }
+    }
+
+    #[test]
+    fn test_reverse_insertion() {
+        // Inserting largest to smallest should result in the k smallest
+        let mut sk = SmallestK::new(3);
+        for i in (1..=10).rev() {
+            sk.insert(entry(i as f32, i));
+        }
+        assert_eq!(sk.len(), 3);
+        let mut results: Vec<_> = sk.into_iter().map(|c| c.index).collect();
+        results.sort();
+        assert_eq!(results, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_duplicate_prevention() {
+        let mut sk = SmallestK::new(5);
+        // Insert the same item multiple times
+        sk.insert(entry(1.0, 100));
+        sk.insert(entry(1.0, 100));
+        sk.insert(entry(2.0, 200));
+
+        assert_eq!(sk.len(), 2, "Should have ignored identical duplicate");
+    }
+
+    #[test]
+    fn test_threshold_eviction() {
+        let mut sk = SmallestK::new(2);
+
+        // Fill it: [10.0, 20.0]
+        sk.insert(entry(10.0, 1));
+        sk.insert(entry(20.0, 2));
+
+        // This should be ignored (30.0 > 20.0)
+        sk.insert(entry(30.0, 3));
+        assert_eq!(sk.len(), 2);
+
+        // This should replace 20.0 (15.0 < 20.0)
+        sk.insert(entry(15.0, 4));
+
+        let mut final_scores: Vec<f32> = sk.iter().map(|c| c.distance.0).collect();
+        final_scores.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        assert_eq!(final_scores, vec![10.0, 15.0]);
+    }
+
+    #[test]
+    fn test_capacity_one() {
+        let mut sk = SmallestK::new(1);
+        sk.insert(entry(50.0, 1));
+        sk.insert(entry(10.0, 2)); // Replace
+        sk.insert(entry(100.0, 3)); // Ignore
+
+        assert_eq!(sk.len(), 1);
+        assert_eq!(sk.iter().next().unwrap().index, 2);
+    }
+
+    #[test]
+    fn test_randomized_consistency() {
+        use rand::prelude::*;
+        let mut rng = StdRng::seed_from_u64(42);
+
+        let k = 10;
+        let mut sk = SmallestK::new(k);
+        let mut all_entries = Vec::new();
+
+        for i in 0..100 {
+            let dist = rng.random_range(0.0..1000.0);
+            let e = entry(dist, i);
+            sk.insert(e.clone());
+            all_entries.push(e);
+        }
+
+        // The "Truth": Sort all entries and take the first K unique indices
+        all_entries.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        // Simple unique by index for comparison
+        let mut expected: Vec<CandidateEntry> = Vec::new();
+        for e in all_entries {
+            if !expected.iter().any(|x| x.index == e.index) {
+                expected.push(e);
+            }
+            if expected.len() == k {
+                break;
+            }
+        }
+
+        let mut actual: Vec<_> = sk.into_iter().collect();
+        actual.sort();
+
+        assert_eq!(actual.len(), k);
+        for i in 0..k {
+            assert_eq!(actual[i].index, expected[i].index);
+        }
     }
 }

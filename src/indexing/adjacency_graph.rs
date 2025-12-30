@@ -66,7 +66,7 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
     ) -> Vec<CandidateEntry> {
         assert!(beam_width >= k);
 
-        let mut candidates: SmallestK<CandidateEntry> = SmallestK::new(beam_width);
+        let mut candidates: SmallestK = SmallestK::new(beam_width);
         let mut visited = CompressedBitset::new();
 
         // find a few starting points for the beam call, using LSH
@@ -96,7 +96,7 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
             let candidate_catapults = &best_candidate_node.catapults.read().unwrap();
 
             for &neighbor in candidate_regular_neighbors
-                .to_vec(level)
+                .to_box(level)
                 .iter()
                 .chain(&candidate_catapults.to_vec())
                 .unique()
@@ -205,7 +205,7 @@ mod tests {
                 .adjacency
                 .iter()
                 .map(|n| {
-                    n.catapults.read().unwrap().to_vec().len() + n.neighbors.to_vec(None).len()
+                    n.catapults.read().unwrap().to_vec().len() + n.neighbors.to_box(None).len()
                 })
                 .sum::<usize>(),
             6
@@ -214,7 +214,7 @@ mod tests {
             graph
                 .adjacency
                 .iter()
-                .map(|n| { n.neighbors.to_vec(None).len() })
+                .map(|n| { n.neighbors.to_box(None).len() })
                 .sum::<usize>(),
             5
         );

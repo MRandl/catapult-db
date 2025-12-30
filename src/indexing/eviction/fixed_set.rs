@@ -10,7 +10,7 @@ impl FixedSet {
         }
     }
 
-    pub fn to_vec(&self, _at_level: Option<u32>) -> Box<[usize]> {
+    pub fn to_box(&self, _at_level: Option<u32>) -> Box<[usize]> {
         self.neighbors.clone()
     }
 }
