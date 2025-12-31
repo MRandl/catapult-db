@@ -1,6 +1,7 @@
 use crate::{
     indexing::{
         eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet},
+        graph_hierarchy::GraphSearchAlgo,
         node::{self, Node},
     },
     numerics::{AlignedBlock, SIMD_LANECOUNT},
@@ -15,7 +16,7 @@ use std::{
     sync::RwLock,
 };
 
-impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
+impl<T: CatapultNeighborSet, GraphSearchType: GraphSearchAlgo> AdjacencyGraph<T, GraphSearchType> {
     fn next_u32<I, const LOAD_LI_ENDIAN: bool>(iter: &mut I) -> Result<u32, String>
     where
         I: Iterator<Item = Result<u8, Error>>,
@@ -102,7 +103,7 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
     pub fn load_from_path<const LOAD_LI_ENDIAN: bool>(
         graph_path: PathBuf,
         payload_path: PathBuf,
-    ) -> Vec<Node<T>> {
+    ) -> Vec<Node<T, GraphSearchType>> {
         let mut graph_file = BufReader::new(File::open(graph_path).expect("FNF")).bytes();
         let mut payload_file = BufReader::new(File::open(payload_path).expect("FNF")).bytes();
 

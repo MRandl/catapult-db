@@ -1,6 +1,7 @@
 use catapult::indexing::adjacency_graph::AdjacencyGraph;
 use catapult::indexing::engine_starter::EngineStarter;
 use catapult::indexing::eviction::FifoSet;
+use catapult::indexing::graph_hierarchy::FlatSearch;
 use catapult::numerics::AlignedBlock;
 use catapult::numerics::SIMD_LANECOUNT;
 use clap::Parser;
@@ -53,7 +54,7 @@ fn main() {
 
     // Load the adjacency graph from file
     println!("Loading adjacency graph...");
-    let adjacency = AdjacencyGraph::<FifoSet<30>>::load_from_path::<LOAD_LI_ENDIAN>(
+    let adjacency = AdjacencyGraph::<FifoSet<30>, FlatSearch>::load_from_path::<LOAD_LI_ENDIAN>(
         PathBuf::from_str(&args.graph).unwrap(),
         PathBuf::from_str(&args.payload).unwrap(),
     );

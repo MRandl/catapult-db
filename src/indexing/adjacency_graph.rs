@@ -2,7 +2,7 @@ use crate::{
     candidates::{CandidateEntry, CompressedBitset, SmallestKCandidates, VisitorSet},
     indexing::{
         engine_starter::EngineStarter, eviction::catapult_neighbor_set::CatapultNeighborSet,
-        node::Node,
+        graph_hierarchy::GraphSearchAlgo, node::Node,
     },
     numerics::{AlignedBlock, VectorLike},
 };
@@ -18,14 +18,22 @@ use crate::{
 /// - [`beam_search`] implements a *best-first beam search*: it keeps only the
 ///   `beam_width` closest candidates seen so far and repeatedly expands the best
 ///   not-yet-visited candidate until no such candidate remains.
-pub struct AdjacencyGraph<T: CatapultNeighborSet> {
-    adjacency: Vec<Node<T>>,
+pub struct AdjacencyGraph<CatapultEvictionPolicy, GraphSearchType>
+where
+    CatapultEvictionPolicy: CatapultNeighborSet,
+    GraphSearchType: GraphSearchAlgo,
+{
+    adjacency: Vec<Node<CatapultEvictionPolicy, GraphSearchType>>,
     starter: EngineStarter,
     catapults: bool,
 }
 
-impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
-    pub fn new(adj: Vec<Node<T>>, engine: EngineStarter, catapults: bool) -> Self {
+impl<T, GraphSearchType> AdjacencyGraph<T, GraphSearchType>
+where
+    T: CatapultNeighborSet,
+    GraphSearchType: GraphSearchAlgo,
+{
+    pub fn new(adj: Vec<Node<T, GraphSearchType>>, engine: EngineStarter, catapults: bool) -> Self {
         Self {
             adjacency: adj,
             starter: engine,
@@ -144,7 +152,10 @@ impl<T: CatapultNeighborSet> AdjacencyGraph<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::indexing::eviction::{FixedSet, unbounded_set::UnboundedNeighborSet};
+    use crate::indexing::{
+        eviction::{FixedSet, unbounded_set::UnboundedNeighborSet},
+        graph_hierarchy::FlatSearch,
+    };
 
     use super::*;
     use std::sync::RwLock;
@@ -153,7 +164,7 @@ mod tests {
     // Nodes: 0 (pos 0), 1 (pos 10), 2 (pos 20), 3 (pos 30), 4 (pos 40)
     // Edges: 0 -> 1 -> 2 -> 3 -> 4
     // Query: 11.0
-    fn setup_simple_graph() -> AdjacencyGraph<UnboundedNeighborSet> {
+    fn setup_simple_graph() -> AdjacencyGraph<UnboundedNeighborSet, FlatSearch> {
         let nodes = vec![
             // 0: Pos 0.0, Neighbors: [1]
             Node {
@@ -236,7 +247,7 @@ mod tests {
             // 0: Pos 100.0, Dist 10000
             Node {
                 payload: vec![AlignedBlock::new([100.0; 8])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![2]),
+                neighbors: FixedSet::<FlatSearch>::new(vec![2]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 0.0, Dist 1. (BEST of all)
@@ -275,7 +286,7 @@ mod tests {
     #[test]
     fn test_complex_search_divergence() {
         // Query target: [0.0]
-        let nodes: Vec<Node<UnboundedNeighborSet>> = vec![
+        let nodes: Vec<Node<UnboundedNeighborSet, FlatSearch>> = vec![
             // 0: Pos 10.0, Dist 100. N: [1, 5]. (Start point)
             Node {
                 payload: vec![AlignedBlock::new([10.0; 8])].into_boxed_slice(),
