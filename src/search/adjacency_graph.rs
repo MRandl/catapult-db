@@ -202,7 +202,7 @@ where
         query: &[AlignedBlock],
         k: usize,
         beam_width: usize,
-        curr_points: &Vec<usize>,
+        curr_points: &[usize],
     ) -> Option<Vec<usize>> {
         let mut all_neighbors = Vec::new();
         for starting_point in curr_points.iter() {
