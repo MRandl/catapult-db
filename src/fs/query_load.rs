@@ -4,7 +4,6 @@ pub trait Queries {
     fn load_from_npy(path: &str) -> Self;
 }
 
-//TODO: make it Vec<[AlignedBlock]> for contiguous accesses
 impl Queries for Vec<Vec<AlignedBlock>> {
     fn load_from_npy(path: &str) -> Self {
         let bytes = std::fs::read(path).unwrap();
@@ -39,11 +38,6 @@ mod tests {
 
     #[test]
     fn test_load_4vecs() {
-        let vectors = Vec::<Vec<AlignedBlock>>::load_from_npy("test_index/4vecs/4vecs.npy");
-
-        println!("Loaded {} vectors", vectors.len());
-        for (i, vec) in vectors.iter().enumerate() {
-            println!("Vector {}: {:?}", i, vec);
-        }
+        let _ = Vec::<Vec<AlignedBlock>>::load_from_npy("test_index/4vecs/4vecs.npy");
     }
 }

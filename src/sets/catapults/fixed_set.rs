@@ -1,6 +1,6 @@
 use std::{fmt::Debug, marker::PhantomData};
 
-use crate::search::GraphSearchAlgo;
+use crate::search::GraphSearchAlgorithm;
 
 pub struct FixedSet<GraphSearchType> {
     neighbors: Box<[usize]>,
@@ -9,7 +9,7 @@ pub struct FixedSet<GraphSearchType> {
 
 impl<T> FixedSet<T>
 where
-    T: GraphSearchAlgo,
+    T: GraphSearchAlgorithm,
 {
     pub fn new(initial_values: Vec<usize>) -> Self {
         FixedSet {
@@ -18,14 +18,14 @@ where
         }
     }
 
-    pub fn to_box(&self, _at_level: Option<u32>) -> Box<[usize]> {
+    pub fn to_box(&self, _at_level: T::LevelContext) -> Box<[usize]> {
         self.neighbors.clone()
     }
 }
 
 impl<T> Debug for FixedSet<T>
 where
-    T: GraphSearchAlgo,
+    T: GraphSearchAlgorithm,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FixedSet")

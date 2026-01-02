@@ -1,7 +1,7 @@
 use crate::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
-    search::{AdjacencyGraph, GraphSearchAlgo, Node},
-    sets::catapults::{CatapultNeighborSet, FixedSet},
+    search::{AdjacencyGraph, GraphSearchAlgorithm, Node},
+    sets::catapults::{CatapultEvictingStructure, FixedSet},
 };
 
 use std::{
@@ -11,7 +11,9 @@ use std::{
     sync::RwLock,
 };
 
-impl<T: CatapultNeighborSet, GraphSearchType: GraphSearchAlgo> AdjacencyGraph<T, GraphSearchType> {
+impl<T: CatapultEvictingStructure, GraphSearchType: GraphSearchAlgorithm>
+    AdjacencyGraph<T, GraphSearchType>
+{
     fn next_u32<I, const LOAD_LI_ENDIAN: bool>(iter: &mut I) -> Result<u32, String>
     where
         I: Iterator<Item = Result<u8, Error>>,

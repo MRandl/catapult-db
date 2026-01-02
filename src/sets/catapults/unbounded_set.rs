@@ -1,4 +1,4 @@
-use crate::sets::catapults::CatapultNeighborSet;
+use crate::sets::catapults::CatapultEvictingStructure;
 
 pub struct UnboundedNeighborSet {
     neighbors: Vec<usize>,
@@ -16,7 +16,7 @@ impl Default for UnboundedNeighborSet {
     }
 }
 
-impl CatapultNeighborSet for UnboundedNeighborSet {
+impl CatapultEvictingStructure for UnboundedNeighborSet {
     fn to_vec(&self) -> Vec<usize> {
         self.neighbors.clone()
     }

@@ -1,8 +1,8 @@
 use std::{fmt::Debug, sync::RwLock};
 
 use crate::{
-    numerics::AlignedBlock, search::graph_hierarchy::GraphSearchAlgo,
-    sets::catapults::CatapultNeighborSet, sets::catapults::FixedSet,
+    numerics::AlignedBlock, search::graph_hierarchy::GraphSearchAlgorithm,
+    sets::catapults::CatapultEvictingStructure, sets::catapults::FixedSet,
 };
 
 pub struct Node<CatapultNeighbors, GraphSearchType> {
@@ -11,7 +11,7 @@ pub struct Node<CatapultNeighbors, GraphSearchType> {
     pub payload: Box<[AlignedBlock]>,
 }
 
-impl<T: CatapultNeighborSet + Debug, GraphSearchType: GraphSearchAlgo> Debug
+impl<T: CatapultEvictingStructure + Debug, GraphSearchType: GraphSearchAlgorithm> Debug
     for Node<T, GraphSearchType>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -1,7 +1,7 @@
 use crate::{numerics::AlignedBlock, search::hash_start::EngineStarter};
 
-pub trait GraphSearchAlgo {
-    type LevelContext;
+pub trait GraphSearchAlgorithm {
+    type LevelContext: Clone + Copy;
     type CatapultChoice: Clone + Copy;
     type StartingPointSelector;
 
@@ -20,7 +20,7 @@ pub enum FlatCatapultChoice {
     CatapultsEnabled = 1,
 }
 
-impl GraphSearchAlgo for FlatSearch {
+impl GraphSearchAlgorithm for FlatSearch {
     type LevelContext = (); // flat search has no concept of a graph level
     type CatapultChoice = FlatCatapultChoice;
     type StartingPointSelector = EngineStarter;
@@ -55,7 +55,7 @@ pub enum HNSWCatapultChoice {
     FinalizingCatapults,
 }
 
-impl GraphSearchAlgo for HNSWSearch {
+impl GraphSearchAlgorithm for HNSWSearch {
     type LevelContext = u32;
     type CatapultChoice = HNSWCatapultChoice;
     type StartingPointSelector = HNSWEngineStarter;

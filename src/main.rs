@@ -86,7 +86,7 @@ fn main() {
 
         for (i, query) in queries.iter().enumerate() {
             let _result =
-                black_box(full_graph.beam_search_flat(query, args.num_neighbors, args.beam_width));
+                black_box(full_graph.beam_search(query, args.num_neighbors, args.beam_width));
             reses.push(_result[0]);
 
             // Print progress every 100k queries
@@ -118,7 +118,7 @@ fn main() {
                 thread::spawn(move || {
                     let mut local_results = Vec::with_capacity(end - start);
                     for query in &queries_clone[start..end] {
-                        let _result = black_box(graph.beam_search_flat(
+                        let _result = black_box(graph.beam_search(
                             query,
                             args.num_neighbors,
                             args.beam_width,

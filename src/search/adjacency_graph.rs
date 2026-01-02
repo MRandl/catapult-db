@@ -1,12 +1,13 @@
 use crate::{
     numerics::{AlignedBlock, VectorLike},
     search::{
-        graph_hierarchy::{FlatSearch, GraphSearchAlgo, HNSWSearch},
+        HNSWCatapultChoice,
+        graph_hierarchy::{FlatSearch, GraphSearchAlgorithm, HNSWSearch},
         node::Node,
     },
     sets::{
         candidates::{CandidateEntry, SmallestKCandidates},
-        catapults::CatapultNeighborSet,
+        catapults::CatapultEvictingStructure,
         visited::{CompressedBitset, VisitorSet},
     },
 };
@@ -22,25 +23,25 @@ use crate::{
 /// - [`beam_search`] implements a *best-first beam search*: it keeps only the
 ///   `beam_width` closest candidates seen so far and repeatedly expands the best
 ///   not-yet-visited candidate until no such candidate remains.
-pub struct AdjacencyGraph<CatapultEvictionPolicy, GraphSearchType>
+pub struct AdjacencyGraph<EvictPolicy, Algo>
 where
-    CatapultEvictionPolicy: CatapultNeighborSet,
-    GraphSearchType: GraphSearchAlgo,
+    EvictPolicy: CatapultEvictingStructure,
+    Algo: GraphSearchAlgorithm,
 {
-    adjacency: Vec<Node<CatapultEvictionPolicy, GraphSearchType>>,
-    starter: GraphSearchType::StartingPointSelector,
-    catapults: GraphSearchType::CatapultChoice,
+    adjacency: Vec<Node<EvictPolicy, Algo>>,
+    starter: Algo::StartingPointSelector,
+    catapults: Algo::CatapultChoice,
 }
 
-impl<T, GraphSearchType> AdjacencyGraph<T, GraphSearchType>
+impl<EvictPolicy, SearchAlgo> AdjacencyGraph<EvictPolicy, SearchAlgo>
 where
-    T: CatapultNeighborSet,
-    GraphSearchType: GraphSearchAlgo,
+    EvictPolicy: CatapultEvictingStructure,
+    SearchAlgo: GraphSearchAlgorithm,
 {
     pub fn new(
-        adj: Vec<Node<T, GraphSearchType>>,
-        engine: GraphSearchType::StartingPointSelector,
-        catapults: GraphSearchType::CatapultChoice,
+        adj: Vec<Node<EvictPolicy, SearchAlgo>>,
+        engine: SearchAlgo::StartingPointSelector,
+        catapults: SearchAlgo::CatapultChoice,
     ) -> Self {
         Self {
             adjacency: adj,
@@ -49,7 +50,7 @@ where
         }
     }
 
-    fn compute_distances_from_indices(
+    fn distances_from_indices(
         &self,
         indices: &[usize],
         query: &[AlignedBlock],
@@ -92,20 +93,20 @@ where
     /// # Panics
     /// - If `beam_width < k`.
     /// - If neighbor indices are out of bounds (violates the graph invariant).
-    fn beam_search(
+    fn beam_search_raw(
         &self,
         query: &[AlignedBlock],
         starting_indices: &[usize],
         k: usize,
         beam_width: usize,
-        level: Option<u32>,
+        level: SearchAlgo::LevelContext,
     ) -> Vec<usize> {
         assert!(beam_width >= k);
 
         let mut candidates: SmallestKCandidates = SmallestKCandidates::new(beam_width);
         let mut visited = CompressedBitset::new();
 
-        let starting_candidates = self.compute_distances_from_indices(starting_indices, query);
+        let starting_candidates = self.distances_from_indices(starting_indices, query);
         candidates.insert_batch(&starting_candidates);
 
         // among the LSH-suggested entry points, one of them is 'the best'. Let's identify it.
@@ -129,8 +130,8 @@ where
             // all of these guys become candidates for expansion. if we have too many candidates
             // (beam width parameter), the `candidates` data structure takes care of removing the
             // worst ones.
-            candidates.insert_batch(&self.compute_distances_from_indices(regular_neighbors, query));
-            candidates.insert_batch(&self.compute_distances_from_indices(catapult_landings, query));
+            candidates.insert_batch(&self.distances_from_indices(regular_neighbors, query));
+            candidates.insert_batch(&self.distances_from_indices(catapult_landings, query));
 
             // mark our current node as visited (not to be expanded again)
             visited.set(best_candidate_index);
@@ -145,10 +146,10 @@ where
 
         // we have beam_width neighbors, we only need k so we need to rerank
         let mut candidate_vec = candidates.into_iter().collect::<Vec<_>>();
-        candidate_vec.sort();
+        candidate_vec.sort(); // note: implicitly relying on CandidateEntry ordering here
 
         // just before returning, add the catapult if we are in catapult mode
-        if GraphSearchType::local_catapults_enabled(self.catapults) {
+        if SearchAlgo::local_catapults_enabled(self.catapults) {
             self.adjacency[initial_best_node]
                 .catapults
                 .write()
@@ -157,45 +158,97 @@ where
         }
 
         // and return the best k, job done :)
-        candidate_vec
-            .into_iter()
-            .take(k)
-            .map(|entry| entry.index)
-            .collect()
+        candidate_vec.into_iter().map(|e| e.index).take(k).collect()
     }
 }
 
-impl<EvictionPolicy> AdjacencyGraph<EvictionPolicy, FlatSearch>
+impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
 where
-    EvictionPolicy: CatapultNeighborSet,
+    EvictPolicy: CatapultEvictingStructure,
 {
-    pub fn beam_search_flat(
-        &self,
-        query: &[AlignedBlock],
-        k: usize,
-        beam_width: usize,
-    ) -> Vec<usize> {
+    pub fn beam_search(&self, query: &[AlignedBlock], k: usize, beam_width: usize) -> Vec<usize> {
         let starting_points = self.starter.select_starting_points(query, k);
-        self.beam_search(query, &starting_points, k, beam_width, None)
+        self.beam_search_raw(query, &starting_points, k, beam_width, ())
     }
 }
 
-impl<EvictionPolicy> AdjacencyGraph<EvictionPolicy, HNSWSearch>
+impl<EvictPolicy> AdjacencyGraph<EvictPolicy, HNSWSearch>
 where
-    EvictionPolicy: CatapultNeighborSet,
+    EvictPolicy: CatapultEvictingStructure,
 {
-    pub fn beam_search_hnsw(
+    pub fn beam_search(&self, query: &[AlignedBlock], k: usize, beam_width: usize) -> Vec<usize> {
+        let mut curr_points = self.starter.select_starting_points(query, k);
+
+        // if there is an interesting catapult in the starting set, we immediately start
+        // at the bottom level (only in catapult finalizing mode, see graph_hierarchy.rs)
+        if self.catapults == HNSWCatapultChoice::FinalizingCatapults
+            && let Some(value) = self.try_catapulting_beam(query, k, beam_width, &curr_points)
+        {
+            return value;
+        }
+
+        for curr_level in (0..=self.starter.max_level).rev() {
+            // note: curr_points maintains a size of k (<= beam_width) even though two consecutive
+            // beam search calls work with beam_width elements, which may be suboptimal.
+            // todo check the original HNSW paper for how they tackle this. I'm probably paranoid.
+            curr_points = self.beam_search_raw(query, &curr_points, k, beam_width, curr_level)
+        }
+
+        curr_points
+    }
+
+    fn try_catapulting_beam(
         &self,
         query: &[AlignedBlock],
         k: usize,
         beam_width: usize,
-    ) -> Vec<usize> {
-        let mut starting_points = self.starter.select_starting_points(query, k);
-        for curr_level in (0..=self.starter.max_level).rev() {
-            starting_points =
-                self.beam_search(query, &starting_points, k, beam_width, Some(curr_level))
+        curr_points: &Vec<usize>,
+    ) -> Option<Vec<usize>> {
+        let mut all_neighbors = Vec::new();
+        for starting_point in curr_points.iter() {
+            let starting_neighs = self.adjacency[*starting_point]
+                .neighbors
+                .to_box(self.starter.max_level);
+            all_neighbors.extend_from_slice(&starting_neighs);
         }
-        starting_points
+        all_neighbors.sort_unstable();
+        all_neighbors.dedup();
+
+        let mut all_catapults = Vec::new();
+        for starting_point in curr_points.iter() {
+            let starting_catas = self.adjacency[*starting_point]
+                .catapults
+                .read()
+                .unwrap()
+                .to_vec();
+            all_catapults.extend_from_slice(&starting_catas);
+        }
+        all_catapults.sort_unstable();
+        all_catapults.dedup();
+
+        let best_neighbor = self
+            .distances_from_indices(&all_neighbors, query)
+            .into_iter()
+            .min()
+            .expect("Starting nodes are disconnected from the graph. That's pretty awkward.");
+        //   ^^^^^^ crash if we end up in the situation where the graph is disconnected.
+        // pretty sure the graph builders (DiskANN / FAISS) make sure this NEVER EVER happens, but
+        // let's be sure and check here.
+
+        let best_catapult = self
+            .distances_from_indices(&all_catapults, query)
+            .into_iter()
+            .min();
+
+        // if we have a catapult that is interesting, trigger it and start at level zero.
+        if let Some(best_catapult) = best_catapult
+            && best_catapult < best_neighbor
+        {
+            let level_zero_starter = [best_catapult.index]; // one-man starter. do your best, little man
+            Some(self.beam_search_raw(query, &level_zero_starter, k, beam_width, 0))
+        } else {
+            None
+        }
     }
 }
 
@@ -266,7 +319,7 @@ mod tests {
 
         // Distances: 0(121), 1(1), 2(81), 3(361), 4(841)
 
-        let results = graph.beam_search_flat(&query, k, beam_width);
+        let results = graph.beam_search(&query, k, beam_width);
 
         // Final candidates (in order of distance): 1 (1), 2 (81), 0 (121)
         // Top K=2 results: [1, 2]
@@ -280,7 +333,7 @@ mod tests {
                 .adjacency
                 .iter()
                 .map(|n| {
-                    n.catapults.read().unwrap().to_vec().len() + n.neighbors.to_box(None).len()
+                    n.catapults.read().unwrap().to_vec().len() + n.neighbors.to_box(()).len()
                 })
                 .sum::<usize>(),
             6
@@ -289,7 +342,7 @@ mod tests {
             graph
                 .adjacency
                 .iter()
-                .map(|n| { n.neighbors.to_box(None).len() })
+                .map(|n| { n.neighbors.to_box(()).len() })
                 .sum::<usize>(),
             5
         );
@@ -327,8 +380,7 @@ mod tests {
         let k = 2;
         let beam_width = 3;
 
-        let results = graph.beam_search_flat(&query, k, beam_width);
-        println!("Top K={} results: {:?}", k, results);
+        let results = graph.beam_search(&query, k, beam_width);
         // Top K=2 results: [1, 2]
         assert_eq!(results.len(), k);
         assert_eq!(results[0], 1);
@@ -385,7 +437,7 @@ mod tests {
         let k = 1;
         let beam_width = 2; // Tight beam width forces early pruning
 
-        let results = graph.beam_search_flat(&query, k, beam_width);
+        let results = graph.beam_search(&query, k, beam_width);
 
         // The globally best result (Node 4) must be found and returned.
         assert_eq!(results.len(), k);
