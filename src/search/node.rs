@@ -5,11 +5,7 @@ use crate::{
     sets::catapults::CatapultNeighborSet, sets::catapults::FixedSet,
 };
 
-pub struct Node<CatapultNeighbors, GraphSearchType>
-where
-    CatapultNeighbors: CatapultNeighborSet,
-    GraphSearchType: GraphSearchAlgo,
-{
+pub struct Node<CatapultNeighbors, GraphSearchType> {
     pub neighbors: FixedSet<GraphSearchType>,
     pub catapults: RwLock<CatapultNeighbors>,
     pub payload: Box<[AlignedBlock]>,

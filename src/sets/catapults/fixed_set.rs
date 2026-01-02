@@ -2,10 +2,7 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use crate::search::GraphSearchAlgo;
 
-pub struct FixedSet<GraphSearchType>
-where
-    GraphSearchType: GraphSearchAlgo,
-{
+pub struct FixedSet<GraphSearchType> {
     neighbors: Box<[usize]>,
     _phantom: PhantomData<GraphSearchType>,
 }
