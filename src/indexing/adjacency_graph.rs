@@ -1,8 +1,9 @@
 use crate::{
     candidates::{CandidateEntry, CompressedBitset, SmallestKCandidates, VisitorSet},
     indexing::{
-        engine_starter::EngineStarter, eviction::catapult_neighbor_set::CatapultNeighborSet,
-        graph_hierarchy::GraphSearchAlgo, node::Node,
+        eviction::catapult_neighbor_set::CatapultNeighborSet,
+        graph_hierarchy::{FlatSearch, GraphSearchAlgo, HNSWSearch},
+        node::Node,
     },
     numerics::{AlignedBlock, VectorLike},
 };
@@ -24,8 +25,8 @@ where
     GraphSearchType: GraphSearchAlgo,
 {
     adjacency: Vec<Node<CatapultEvictionPolicy, GraphSearchType>>,
-    starter: EngineStarter,
-    catapults: bool,
+    starter: GraphSearchType::StartingPointSelector,
+    catapults: GraphSearchType::CatapultChoice,
 }
 
 impl<T, GraphSearchType> AdjacencyGraph<T, GraphSearchType>
@@ -33,7 +34,11 @@ where
     T: CatapultNeighborSet,
     GraphSearchType: GraphSearchAlgo,
 {
-    pub fn new(adj: Vec<Node<T, GraphSearchType>>, engine: EngineStarter, catapults: bool) -> Self {
+    pub fn new(
+        adj: Vec<Node<T, GraphSearchType>>,
+        engine: GraphSearchType::StartingPointSelector,
+        catapults: GraphSearchType::CatapultChoice,
+    ) -> Self {
         Self {
             adjacency: adj,
             starter: engine,
@@ -41,7 +46,11 @@ where
         }
     }
 
-    fn compute_distances(&self, indices: &[usize], query: &[AlignedBlock]) -> Vec<CandidateEntry> {
+    fn compute_distances_from_indices(
+        &self,
+        indices: &[usize],
+        query: &[AlignedBlock],
+    ) -> Vec<CandidateEntry> {
         indices
             .iter()
             .map(|&index| {
@@ -80,21 +89,20 @@ where
     /// # Panics
     /// - If `beam_width < k`.
     /// - If neighbor indices are out of bounds (violates the graph invariant).
-    pub fn beam_search(
+    fn beam_search(
         &self,
         query: &[AlignedBlock],
+        starting_indices: &[usize],
         k: usize,
         beam_width: usize,
         level: Option<u32>,
-    ) -> Vec<CandidateEntry> {
+    ) -> Vec<usize> {
         assert!(beam_width >= k);
 
         let mut candidates: SmallestKCandidates = SmallestKCandidates::new(beam_width);
         let mut visited = CompressedBitset::new();
 
-        // find a few starting points for the beam call, using LSH
-        let starting_indices = self.starter.select_starting_points(query, beam_width);
-        let starting_candidates = self.compute_distances(&starting_indices, query);
+        let starting_candidates = self.compute_distances_from_indices(starting_indices, query);
         candidates.insert_batch(&starting_candidates);
 
         // among the LSH-suggested entry points, one of them is 'the best'. Let's identify it.
@@ -118,8 +126,8 @@ where
             // all of these guys become candidates for expansion. if we have too many candidates
             // (beam width parameter), the `candidates` data structure takes care of removing the
             // worst ones.
-            candidates.insert_batch(&self.compute_distances(regular_neighbors, query));
-            candidates.insert_batch(&self.compute_distances(catapult_landings, query));
+            candidates.insert_batch(&self.compute_distances_from_indices(regular_neighbors, query));
+            candidates.insert_batch(&self.compute_distances_from_indices(catapult_landings, query));
 
             // mark our current node as visited (not to be expanded again)
             visited.set(best_candidate_index);
@@ -137,7 +145,7 @@ where
         candidate_vec.sort();
 
         // just before returning, add the catapult if we are in catapult mode
-        if self.catapults {
+        if GraphSearchType::local_catapults_enabled(self.catapults) {
             self.adjacency[initial_best_node]
                 .catapults
                 .write()
@@ -146,15 +154,54 @@ where
         }
 
         // and return the best k, job done :)
-        candidate_vec.into_iter().take(k).collect()
+        candidate_vec
+            .into_iter()
+            .take(k)
+            .map(|entry| entry.index)
+            .collect()
+    }
+}
+
+impl<EvictionPolicy> AdjacencyGraph<EvictionPolicy, FlatSearch>
+where
+    EvictionPolicy: CatapultNeighborSet,
+{
+    pub fn beam_search_flat(
+        &self,
+        query: &[AlignedBlock],
+        k: usize,
+        beam_width: usize,
+    ) -> Vec<usize> {
+        let starting_points = self.starter.select_starting_points(query, k);
+        self.beam_search(query, &starting_points, k, beam_width, None)
+    }
+}
+
+impl<EvictionPolicy> AdjacencyGraph<EvictionPolicy, HNSWSearch>
+where
+    EvictionPolicy: CatapultNeighborSet,
+{
+    pub fn beam_search_hnsw(
+        &self,
+        query: &[AlignedBlock],
+        k: usize,
+        beam_width: usize,
+    ) -> Vec<usize> {
+        let mut starting_points = self.starter.select_starting_points(query, k);
+        for curr_level in (0..=self.starter.max_level).rev() {
+            starting_points =
+                self.beam_search(query, &starting_points, k, beam_width, Some(curr_level))
+        }
+        starting_points
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::indexing::{
+        engine_starter::EngineStarter,
         eviction::{FixedSet, unbounded_set::UnboundedNeighborSet},
-        graph_hierarchy::FlatSearch,
+        graph_hierarchy::{FlatCatapultChoice, FlatSearch},
     };
 
     use super::*;
@@ -198,7 +245,11 @@ mod tests {
             },
         ];
         // Start from node 0
-        AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 4, Some(42)), true)
+        AdjacencyGraph::new(
+            nodes,
+            EngineStarter::new(4, 8, 4, Some(42)),
+            FlatCatapultChoice::CatapultsEnabled,
+        )
     }
 
     #[test]
@@ -210,15 +261,13 @@ mod tests {
 
         // Distances: 0(121), 1(1), 2(81), 3(361), 4(841)
 
-        let results = graph.beam_search(&query, k, beam_width, None);
+        let results = graph.beam_search_flat(&query, k, beam_width);
 
         // Final candidates (in order of distance): 1 (1), 2 (81), 0 (121)
         // Top K=2 results: [1, 2]
         assert_eq!(results.len(), k);
-        assert_eq!(results[0].index, 1);
-        assert_eq!(results[0].distance, (8.0).into());
-        assert_eq!(results[1].index, 2);
-        assert_eq!(results[1].distance, (648.0).into());
+        assert_eq!(results[0], 1);
+        assert_eq!(results[1], 2);
 
         // Expanded: 0 (1 edge) + 1 (1 edge) + 2 (2 edges) + 0 (1 edge) = 5 edges
         assert_eq!(
@@ -264,23 +313,21 @@ mod tests {
             },
         ];
         // Start points: 0, 2
-        let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 3, Some(42)), true);
+        let graph = AdjacencyGraph::new(
+            nodes,
+            EngineStarter::new(4, 8, 3, Some(42)),
+            FlatCatapultChoice::CatapultsEnabled,
+        );
         let query = vec![AlignedBlock::new([1.0; 8])];
         let k = 2;
         let beam_width = 3;
 
-        let results = graph.beam_search(&query, k, beam_width, None);
-        println!(
-            "Top K={} results: {:?}",
-            k,
-            results.iter().map(|e| e.index).collect::<Vec<_>>()
-        );
+        let results = graph.beam_search_flat(&query, k, beam_width);
+        println!("Top K={} results: {:?}", k, results);
         // Top K=2 results: [1, 2]
         assert_eq!(results.len(), k);
-        assert_eq!(results[0].index, 1);
-        assert_eq!(results[0].distance, 8.0.into());
-        assert_eq!(results[1].index, 2);
-        assert_eq!(results[1].distance, 128.0.into());
+        assert_eq!(results[0], 1);
+        assert_eq!(results[1], 2);
     }
 
     #[test]
@@ -324,17 +371,20 @@ mod tests {
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
-        let graph = AdjacencyGraph::new(nodes, EngineStarter::new(4, 8, 5, Some(42)), true);
+        let graph = AdjacencyGraph::new(
+            nodes,
+            EngineStarter::new(4, 8, 5, Some(42)),
+            FlatCatapultChoice::CatapultsEnabled,
+        );
         let query = vec![AlignedBlock::new([0.0; 8])];
         let k = 1;
         let beam_width = 2; // Tight beam width forces early pruning
 
-        let results = graph.beam_search(&query, k, beam_width, None);
+        let results = graph.beam_search_flat(&query, k, beam_width);
 
         // The globally best result (Node 4) must be found and returned.
         assert_eq!(results.len(), k);
-        assert_eq!(results[0].index, 4);
-        assert_eq!(results[0].distance, 8.0.into());
+        assert_eq!(results[0], 4);
 
         // Check catapult update: Initial node points to Node 4 (final best)
         assert!(

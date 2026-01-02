@@ -1,17 +1,15 @@
-use catapult::indexing::adjacency_graph::AdjacencyGraph;
-use catapult::indexing::engine_starter::EngineStarter;
-use catapult::indexing::eviction::FifoSet;
-use catapult::indexing::graph_hierarchy::FlatSearch;
-use catapult::numerics::AlignedBlock;
-use catapult::numerics::SIMD_LANECOUNT;
+use catapult::{
+    fs::Queries,
+    indexing::{
+        adjacency_graph::AdjacencyGraph,
+        engine_starter::EngineStarter,
+        eviction::FifoSet,
+        graph_hierarchy::{FlatCatapultChoice, FlatSearch},
+    },
+    numerics::{AlignedBlock, SIMD_LANECOUNT},
+};
 use clap::Parser;
-use std::hint::black_box;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::thread;
-
-use catapult::fs::Queries;
+use std::{hint::black_box, path::PathBuf, str::FromStr, sync::Arc, thread};
 
 const LOAD_LI_ENDIAN: bool = cfg!(target_endian = "little");
 
@@ -70,7 +68,15 @@ fn main() {
     let engine_seed = Some(42);
     let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
 
-    let full_graph = Arc::new(AdjacencyGraph::new(adjacency, engine, args.catapults));
+    let full_graph = Arc::new(AdjacencyGraph::new(
+        adjacency,
+        engine,
+        if args.catapults {
+            FlatCatapultChoice::CatapultsEnabled
+        } else {
+            FlatCatapultChoice::CatapultsDisabled
+        },
+    ));
     println!("Adjacency graph loaded with {graph_size} nodes");
 
     let num_threads = args.threads;
@@ -84,8 +90,8 @@ fn main() {
 
         for (i, query) in queries.iter().enumerate() {
             let _result =
-                black_box(full_graph.beam_search(query, args.num_neighbors, args.beam_width, None));
-            reses.push(_result[0].index);
+                black_box(full_graph.beam_search_flat(query, args.num_neighbors, args.beam_width));
+            reses.push(_result[0]);
 
             // Print progress every 100k queries
             if (i + 1) % 100_000 == 0 {
@@ -116,13 +122,12 @@ fn main() {
                 thread::spawn(move || {
                     let mut local_results = Vec::with_capacity(end - start);
                     for query in &queries_clone[start..end] {
-                        let _result = black_box(graph.beam_search(
+                        let _result = black_box(graph.beam_search_flat(
                             query,
                             args.num_neighbors,
                             args.beam_width,
-                            None,
                         ));
-                        local_results.push(_result[0].index);
+                        local_results.push(_result[0]);
                     }
                     local_results
                 })
