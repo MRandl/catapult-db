@@ -1,4 +1,4 @@
-use crate::{indexing::engine_starter::EngineStarter, numerics::AlignedBlock};
+use crate::{numerics::AlignedBlock, search::hash_start::EngineStarter};
 
 pub trait GraphSearchAlgo {
     type LevelContext;

@@ -1,7 +1,7 @@
 #![feature(portable_simd)]
 
-pub mod candidates;
 pub mod fs;
-pub mod indexing;
 pub mod numerics;
+pub mod search;
+pub mod sets;
 pub mod statistics;

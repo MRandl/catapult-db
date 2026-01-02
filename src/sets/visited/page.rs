@@ -23,6 +23,12 @@ impl Page {
     }
 }
 
+impl Default for Page {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

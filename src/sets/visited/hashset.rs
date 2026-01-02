@@ -1,4 +1,4 @@
-use crate::candidates::{VisitorSet, set::integer_map::IntegerSet};
+use crate::sets::visited::{IntegerSet, VisitorSet};
 
 impl VisitorSet for IntegerSet {
     fn get(&self, i: usize) -> bool {

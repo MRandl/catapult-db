@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::indexing::eviction::catapult_neighbor_set::CatapultNeighborSet;
+use crate::sets::catapults::CatapultNeighborSet;
 
 pub struct FifoSet<const CAPACITY: usize> {
     queue: VecDeque<usize>,

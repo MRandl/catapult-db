@@ -1,6 +1,6 @@
 use std::{fmt::Debug, marker::PhantomData};
 
-use crate::indexing::graph_hierarchy::GraphSearchAlgo;
+use crate::search::GraphSearchAlgo;
 
 pub struct FixedSet<GraphSearchType>
 where
@@ -33,7 +33,6 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FixedSet")
             .field("neighbors", &self.neighbors)
-            .field("_phantom", &self._phantom)
             .finish()
     }
 }

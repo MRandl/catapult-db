@@ -1,11 +1,8 @@
 use std::{fmt::Debug, sync::RwLock};
 
 use crate::{
-    indexing::{
-        eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet},
-        graph_hierarchy::GraphSearchAlgo,
-    },
-    numerics::AlignedBlock,
+    numerics::AlignedBlock, search::graph_hierarchy::GraphSearchAlgo,
+    sets::catapults::CatapultNeighborSet, sets::catapults::FixedSet,
 };
 
 pub struct Node<CatapultNeighbors, GraphSearchType>

@@ -1,13 +1,8 @@
 use crate::{
-    indexing::{
-        eviction::{FixedSet, catapult_neighbor_set::CatapultNeighborSet},
-        graph_hierarchy::GraphSearchAlgo,
-        node::{self, Node},
-    },
     numerics::{AlignedBlock, SIMD_LANECOUNT},
+    search::{AdjacencyGraph, GraphSearchAlgo, Node},
+    sets::catapults::{CatapultNeighborSet, FixedSet},
 };
-
-use crate::indexing::adjacency_graph::AdjacencyGraph;
 
 use std::{
     fs::File,
@@ -142,7 +137,7 @@ impl<T: CatapultNeighborSet, GraphSearchType: GraphSearchAlgo> AdjacencyGraph<T,
                 Self::next_payload::<_, LOAD_LI_ENDIAN>(&mut payload_file, payload_dim)
                     .expect("Error while parsing payloads");
 
-            adjacency.push(node::Node {
+            adjacency.push(Node {
                 neighbors: FixedSet::new(neighs),
                 catapults: RwLock::new(T::new()),
                 payload: associated_payload.into_boxed_slice(),

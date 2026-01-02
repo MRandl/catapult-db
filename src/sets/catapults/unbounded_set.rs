@@ -1,4 +1,4 @@
-use crate::indexing::eviction::catapult_neighbor_set::CatapultNeighborSet;
+use crate::sets::catapults::CatapultNeighborSet;
 
 pub struct UnboundedNeighborSet {
     neighbors: Vec<usize>,

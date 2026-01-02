@@ -2,8 +2,7 @@ use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use crate::indexing::SimilarityHasher;
-use crate::numerics::AlignedBlock;
+use crate::{numerics::AlignedBlock, search::hash_start::hasher::SimilarityHasher};
 
 pub struct EngineStarter {
     hasher: SimilarityHasher,

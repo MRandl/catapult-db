@@ -1,6 +1,6 @@
 use std::vec::IntoIter;
 
-use crate::candidates::CandidateEntry;
+use crate::sets::candidates::CandidateEntry;
 
 /// A bounded structure that keeps the *k unique smallest* CandidateEntry elements seen so far,
 /// implemented using array scans.

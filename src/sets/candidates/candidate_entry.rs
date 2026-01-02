@@ -1,4 +1,4 @@
-use crate::candidates::ordered_float::TotalF32;
+use crate::sets::candidates::TotalF32;
 use std::hash::Hash;
 
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]

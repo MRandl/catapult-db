@@ -53,6 +53,7 @@ impl SimilarityHasher {
     }
 
     /// Hashes `vector` to a `k`-length binary signature.
+    #[allow(unused)]
     pub fn hash(&self, vector: &[AlignedBlock]) -> Vec<bool> {
         debug_assert!(
             vector.len() == self.stored_vectors_dim / SIMD_LANECOUNT,

@@ -1,11 +1,14 @@
 use crate::{
-    candidates::{CandidateEntry, CompressedBitset, SmallestKCandidates, VisitorSet},
-    indexing::{
-        eviction::catapult_neighbor_set::CatapultNeighborSet,
+    numerics::{AlignedBlock, VectorLike},
+    search::{
         graph_hierarchy::{FlatSearch, GraphSearchAlgo, HNSWSearch},
         node::Node,
     },
-    numerics::{AlignedBlock, VectorLike},
+    sets::{
+        candidates::{CandidateEntry, SmallestKCandidates},
+        catapults::CatapultNeighborSet,
+        visited::{CompressedBitset, VisitorSet},
+    },
 };
 
 /// In-memory adjacency graph used for approximate nearest-neighbor (ANN) search.
@@ -198,10 +201,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::indexing::{
-        engine_starter::EngineStarter,
-        eviction::{FixedSet, unbounded_set::UnboundedNeighborSet},
-        graph_hierarchy::{FlatCatapultChoice, FlatSearch},
+    use crate::{
+        search::{
+            graph_hierarchy::{FlatCatapultChoice, FlatSearch},
+            hash_start::EngineStarter,
+        },
+        sets::catapults::{FixedSet, UnboundedNeighborSet},
     };
 
     use super::*;

@@ -1,7 +1,7 @@
-use crate::candidates::set::{
-    integer_map::IntegerMap,
-    page::{PAGE_SIZE_BITS, Page},
-    visitor_set::VisitorSet,
+use crate::sets::{
+    visited::IntegerMap,
+    visited::VisitorSet,
+    visited::{PAGE_SIZE_BITS, Page},
 };
 
 #[derive(Default)]

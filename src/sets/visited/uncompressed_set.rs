@@ -1,4 +1,4 @@
-use crate::candidates::VisitorSet;
+use crate::sets::visited::VisitorSet;
 
 /// A fixed-capacity set of boolean values packed into a contiguous
 /// buffer of bytes.
@@ -8,7 +8,7 @@ use crate::candidates::VisitorSet;
 /// # Examples
 ///
 /// ```
-/// use catapult::candidates::{UncompressedSet, VisitorSet};
+/// use catapult::sets::visited::{UncompressedSet, VisitorSet};
 ///
 /// let mut bs = UncompressedSet::new(10);
 /// assert!(!bs.get(3));
@@ -27,7 +27,7 @@ impl UncompressedSet {
     ///
     /// # Examples
     /// ```
-    /// use catapult::candidates::{UncompressedSet, VisitorSet};
+    /// use catapult::sets::visited::{UncompressedSet, VisitorSet};
     ///
     /// let bs = UncompressedSet::new(12);
     /// assert!(!bs.get(0));
@@ -50,7 +50,7 @@ impl VisitorSet for UncompressedSet {
     ///
     /// # Examples
     /// ```
-    /// use catapult::candidates::{UncompressedSet, VisitorSet};
+    /// use catapult::sets::visited::{UncompressedSet, VisitorSet};
     ///
     /// let mut bs = UncompressedSet::new(4);
     /// bs.set(2);
@@ -73,7 +73,7 @@ impl VisitorSet for UncompressedSet {
     ///
     /// # Examples
     /// ```
-    /// use catapult::candidates::{UncompressedSet, VisitorSet};
+    /// use catapult::sets::visited::{UncompressedSet, VisitorSet};
     ///
     /// let mut bs = UncompressedSet::new(4);
     /// bs.set(1);

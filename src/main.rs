@@ -1,12 +1,8 @@
 use catapult::{
     fs::Queries,
-    indexing::{
-        adjacency_graph::AdjacencyGraph,
-        engine_starter::EngineStarter,
-        eviction::FifoSet,
-        graph_hierarchy::{FlatCatapultChoice, FlatSearch},
-    },
     numerics::{AlignedBlock, SIMD_LANECOUNT},
+    search::{AdjacencyGraph, FlatCatapultChoice, FlatSearch, hash_start::EngineStarter},
+    sets::catapults::FifoSet,
 };
 use clap::Parser;
 use std::{hint::black_box, path::PathBuf, str::FromStr, sync::Arc, thread};
