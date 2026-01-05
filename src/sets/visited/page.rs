@@ -30,6 +30,7 @@ impl Default for Page {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -38,6 +39,14 @@ mod tests {
         let page = Page::new();
         for i in 0..PAGE_SIZE_BITS {
             assert!(!page.get(i), "bit {} should be cleared on new page", i);
+        }
+        let page_default = Page::default();
+        for i in 0..PAGE_SIZE_BITS {
+            assert!(
+                !page_default.get(i),
+                "bit {} should be cleared on new page",
+                i
+            );
         }
     }
 
