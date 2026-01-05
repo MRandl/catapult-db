@@ -147,12 +147,18 @@ mod tests {
         let hasher = SimilarityHasher {
             stored_vectors_dim: SIMD_LANECOUNT,
             projections: vec![
-                vec![AlignedBlock::new([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
-                vec![AlignedBlock::new([0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])],
+                vec![AlignedBlock::new([
+                    1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                ])],
+                vec![AlignedBlock::new([
+                    0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                ])],
             ], // x-axis and y-axis projections
         };
 
-        let input = vec![AlignedBlock::new([2.0, -3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])];
+        let input = vec![AlignedBlock::new([
+            2.0, -3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        ])];
         let result = hasher.hash(&input);
 
         // Expect: dot([2,-3], [1,0]) = 2 → true

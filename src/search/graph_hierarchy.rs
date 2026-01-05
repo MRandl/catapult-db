@@ -6,6 +6,7 @@ pub trait GraphSearchAlgorithm {
     type StartingPointSelector;
 
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool;
+    fn any_catapults_enabled(strategy: Self::CatapultChoice) -> bool;
 }
 
 // search mode 1: Flat search, where one search is performed on a big graph.
@@ -26,6 +27,10 @@ impl GraphSearchAlgorithm for FlatSearch {
     type StartingPointSelector = EngineStarter;
 
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
+        strategy == FlatCatapultChoice::CatapultsEnabled
+    }
+
+    fn any_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
         strategy == FlatCatapultChoice::CatapultsEnabled
     }
 }
@@ -62,5 +67,9 @@ impl GraphSearchAlgorithm for HNSWSearch {
 
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
         strategy == HNSWCatapultChoice::SameLevelCatapults
+    }
+
+    fn any_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
+        strategy != HNSWCatapultChoice::CatapultsDisabled
     }
 }

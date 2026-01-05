@@ -88,7 +88,7 @@ impl<T: CatapultEvictingStructure, GraphSearchType: GraphSearchAlgorithm>
         let final_length = size / SIMD_LANECOUNT;
         let mut payload = Vec::with_capacity(final_length);
         for _ in 0..final_length {
-            let mut block = [0.0; 8];
+            let mut block = [0.0; SIMD_LANECOUNT];
             for entry in block.iter_mut() {
                 *entry = Self::next_f32::<_, LOAD_LI_ENDIAN>(iter)?;
             }

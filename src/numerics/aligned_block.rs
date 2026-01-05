@@ -1,6 +1,6 @@
-pub const SIMD_LANECOUNT: usize = 8;
+pub const SIMD_LANECOUNT: usize = 16;
 
-#[repr(align(32))]
+#[repr(align(64))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AlignedBlock {
     pub data: [f32; SIMD_LANECOUNT],

@@ -38,7 +38,7 @@ impl VectorLike for [AlignedBlock] {
     /// # Panics
     ///
     /// Panics if the two vectors have different lengths
-    #[inline]
+    #[inline(never)]
     fn l2_squared(&self, othr: &[AlignedBlock]) -> f32 {
         assert_eq!(self.len(), othr.len());
         //assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
@@ -122,9 +122,11 @@ mod tests {
     #[test]
     fn l2_squared_matches_scalar_multiple_of_lanes() {
         let x = vec![AlignedBlock::new([
-            1.0, -2.0, 3.5, 0.0, 0.125, 4.0, -7.0, 2.0,
+            1.0, -2.0, 3.5, 0.0, 0.125, 4.0, -7.0, 2.0, 1.0, -2.0, 3.5, 0.0, 0.125, 4.0, -7.0, 2.0,
         ])];
-        let y = vec![AlignedBlock::new([0.5, 2.0, 3.0, 1.0, -0.5, 1.5, 2.0, 1.0])];
+        let y = vec![AlignedBlock::new([
+            0.5, 2.0, 3.0, 1.0, -0.5, 1.5, 2.0, 1.0, 0.5, 2.0, 3.0, 1.0, -0.5, 1.5, 2.0, 1.0,
+        ])];
 
         let simd = x.l2_squared(&y);
         let scalar = scalar_l2_sq(&x, &y);
@@ -134,18 +136,21 @@ mod tests {
     #[test]
     fn l2_is_sqrt_of_l2_squared() {
         let x = [AlignedBlock::new([
-            1.0, 2.0, 3.0, 4.0, -1.0, -2.0, 0.5, 0.25,
+            1.0, 2.0, 3.0, 4.0, -1.0, -2.0, 0.5, 0.25, 1.0, 2.0, 3.0, 4.0, -1.0, -2.0, 0.5, 0.25,
         ])];
-        let y = [AlignedBlock::new([0.0, 1.0, 1.5, 4.0, 1.0, 0.0, 0.0, 2.0])];
+        let y = [AlignedBlock::new([
+            0.0, 1.0, 1.5, 4.0, 1.0, 0.0, 0.0, 2.0, 0.0, 1.0, 1.5, 4.0, 1.0, 0.0, 0.0, 2.,
+        ])];
 
         let d2 = x.l2_squared(&y);
         let d = x.l2(&y);
         assert!(approx_eq(d, d2.sqrt(), EPS), "d={d} sqrt(d2)={}", d2.sqrt());
     }
+
     #[test]
     fn identical_vectors_have_zero_distance() {
         let x = vec![AlignedBlock::new([
-            0.25, -1.0, 3.0, 4.0, 0.0, 2.0, -3.5, 1.0,
+            0.25, -1.0, 3.0, 4.0, 0.0, 2.0, -3.5, 1.0, 0.25, -1.0, 3.0, 4.0, 0.0, 2.0, -3.5, 1.0,
         ])];
         let d2 = x.l2_squared(&x);
         let d = x.l2(&x);

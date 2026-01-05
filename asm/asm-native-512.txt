@@ -1,0 +1,138 @@
+.section ".text.<[catapult::numerics::aligned_block::AlignedBlock] as catapult::numerics::f32slice::VectorLike>::l2_squared","ax",@progbits
+	.p2align	4
+.type	<[catapult::numerics::aligned_block::AlignedBlock] as catapult::numerics::f32slice::VectorLike>::l2_squared,@function
+<[catapult::numerics::aligned_block::AlignedBlock] as catapult::numerics::f32slice::VectorLike>::l2_squared:
+		// src/numerics/f32slice.rs:42
+		fn l2_squared(&self, othr: &[AlignedBlock]) -> f32 {
+	.cfi_startproc
+	sub rsp, 72
+	.cfi_def_cfa_offset 80
+		// src/numerics/f32slice.rs:43
+		assert_eq!(self.len(), othr.len());
+	mov qword ptr [rsp + 8], rsi
+	mov qword ptr [rsp + 16], rcx
+	cmp rsi, rcx
+	jne .LBB182_5
+		// ~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/zip.rs:309
+		if self.index < self.len {
+	test rsi, rsi
+	je .LBB182_2
+	mov eax, esi
+	and eax, 3
+	cmp rsi, 4
+	jae .LBB182_6
+	vxorps xmm0, xmm0, xmm0
+	xor ecx, ecx
+	jmp .LBB182_8
+.LBB182_2:
+	vxorps xmm0, xmm0, xmm0
+	jmp .LBB182_11
+.LBB182_6:
+	and rsi, -4
+	vxorps xmm0, xmm0, xmm0
+	mov r8d, 192
+	xor ecx, ecx
+	.p2align	4
+.LBB182_7:
+		// src/numerics/f32slice.rs:51
+		for (&slice_self, &slice_othr) in self_chunks.zip(othr_chunks) {
+	vmovaps zmm1, zmmword ptr [rdi + r8 - 192]
+	vmovaps zmm2, zmmword ptr [rdi + r8 - 128]
+	vmovaps zmm3, zmmword ptr [rdi + r8 - 64]
+	vmovaps zmm4, zmmword ptr [rdi + r8]
+		// ~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/../../portable-simd/crates/core_simd/src/ops.rs:40
+		unsafe { core::intrinsics::simd::$simd_call($lhs, $rhs) }
+	vsubps zmm1, zmm1, zmmword ptr [rdx + r8 - 192]
+	vmulps zmm1, zmm1, zmm1
+	vaddps zmm0, zmm0, zmm1
+	vsubps zmm1, zmm2, zmmword ptr [rdx + r8 - 128]
+	vmulps zmm1, zmm1, zmm1
+	vaddps zmm0, zmm0, zmm1
+	vsubps zmm1, zmm3, zmmword ptr [rdx + r8 - 64]
+	vmulps zmm1, zmm1, zmm1
+	vaddps zmm0, zmm0, zmm1
+		// ~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/zip.rs:313
+		self.index += 1;
+	add rcx, 4
+		// ~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/../../portable-simd/crates/core_simd/src/ops.rs:40
+		unsafe { core::intrinsics::simd::$simd_call($lhs, $rhs) }
+	vsubps zmm1, zmm4, zmmword ptr [rdx + r8]
+	vmulps zmm1, zmm1, zmm1
+	vaddps zmm0, zmm0, zmm1
+		// ~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/zip.rs:309
+		if self.index < self.len {
+	add r8, 256
+	cmp rsi, rcx
+	jne .LBB182_7
+.LBB182_8:
+	test rax, rax
+	je .LBB182_11
+	shl rcx, 6
+	add rdx, rcx
+	add rdi, rcx
+	shl eax, 6
+	xor ecx, ecx
+	.p2align	4
+.LBB182_10:
+		// src/numerics/f32slice.rs:51
+		for (&slice_self, &slice_othr) in self_chunks.zip(othr_chunks) {
+	vmovaps zmm1, zmmword ptr [rdi + rcx]
+		// ~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/../../portable-simd/crates/core_simd/src/ops.rs:40
+		unsafe { core::intrinsics::simd::$simd_call($lhs, $rhs) }
+	vsubps zmm1, zmm1, zmmword ptr [rdx + rcx]
+	vmulps zmm1, zmm1, zmm1
+	vaddps zmm0, zmm0, zmm1
+		// ~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/adapters/zip.rs:309
+		if self.index < self.len {
+	add rcx, 64
+	cmp rax, rcx
+	jne .LBB182_10
+.LBB182_11:
+		// ~/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/../../portable-simd/crates/core_simd/src/simd/num/float.rs:422
+		unsafe { core::intrinsics::simd::simd_reduce_add_ordered(self, -0.) }
+	vmovshdup xmm1, xmm0
+	vaddss xmm1, xmm0, xmm1
+	vshufpd xmm2, xmm0, xmm0, 1
+	vaddss xmm1, xmm1, xmm2
+	vshufps xmm2, xmm0, xmm0, 255
+	vaddss xmm1, xmm1, xmm2
+	vextractf128 xmm2, ymm0, 1
+	vaddss xmm1, xmm1, xmm2
+	vmovshdup xmm3, xmm2
+	vaddss xmm1, xmm1, xmm3
+	vshufpd xmm3, xmm2, xmm2, 1
+	vaddss xmm1, xmm1, xmm3
+	vshufps xmm2, xmm2, xmm2, 255
+	vaddss xmm1, xmm1, xmm2
+	vextractf32x4 xmm2, zmm0, 2
+	vaddss xmm1, xmm1, xmm2
+	vmovshdup xmm3, xmm2
+	vaddss xmm1, xmm1, xmm3
+	vshufpd xmm3, xmm2, xmm2, 1
+	vaddss xmm1, xmm1, xmm3
+	vshufps xmm2, xmm2, xmm2, 255
+	vaddss xmm1, xmm1, xmm2
+	vextractf32x4 xmm0, zmm0, 3
+	vaddss xmm1, xmm1, xmm0
+	vmovshdup xmm2, xmm0
+	vaddss xmm1, xmm1, xmm2
+	vshufpd xmm2, xmm0, xmm0, 1
+	vaddss xmm1, xmm1, xmm2
+	vshufps xmm0, xmm0, xmm0, 255
+	vaddss xmm0, xmm1, xmm0
+		// src/numerics/f32slice.rs:62
+		}
+	add rsp, 72
+	.cfi_def_cfa_offset 8
+	vzeroupper
+	ret
+.LBB182_5:
+	.cfi_def_cfa_offset 80
+		// src/numerics/f32slice.rs:43
+		assert_eq!(self.len(), othr.len());
+	mov qword ptr [rsp + 24], 0
+	lea rcx, [rip + .Lanon.da88cccbb7d3332b06a7226f0e6f3564.128]
+	lea rdi, [rsp + 8]
+	lea rsi, [rsp + 16]
+	lea rdx, [rsp + 24]
+	call core::panicking::assert_failed
