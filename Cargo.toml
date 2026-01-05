@@ -11,6 +11,9 @@ name = "catapult"
 path = "src/main.rs"
 test = false
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+
 [profile.release]
 opt-level = 3
 debug = false
