@@ -65,29 +65,29 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Run Tests & Generate Coverage
-              continue-on-error: true
+              id: run-coverage
+              continue-on-error: true # Keep going even if coverage < 100%
               run: cargo llvm-cov --fail-under-lines 100 --show-missing-lines --cobertura --output-path cobertura.xml
 
             - name: Parse Coverage XML to Markdown
               id: coverage-summary
+              # We use a specific version and ensure the file path is relative to the workspace
               uses: irongut/CodeCoverageSummary@v1.3.0
               with:
-                  filename: cobertura.xml
+                  filename: ./cobertura.xml
                   badge: true
                   format: markdown
                   output: both
 
             - name: Post PR Comment
               if: github.event_name == 'pull_request'
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  # Check if there is already a coverage comment to avoid spamming
-                  # Then post the contents of the generated markdown file
-                  gh pr comment ${{ github.event.number }} --body-file code-coverage-results.md
+              uses: thollander/actions-comment-pull-request@v2
+              with:
+                  filePath: code-coverage-results.md
+                  comment_tag: coverage-report # Overwrites old comments instead of spamming
 
-            - name: Enforce Threshold
+            - name: Enforce Coverage Threshold
               if: steps.run-coverage.outcome == 'failure'
               run: |
-                  echo "Coverage is below 100%"
+                  echo "Error: Code coverage is below 100%."
                   exit 1
