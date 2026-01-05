@@ -55,7 +55,9 @@ jobs:
 
     jacoco-enforce:
         runs-on: ubuntu-latest
-        container: randlflep/rust-ci
+        container:
+            image: randlflep/rust-ci
+            options: --user root # Ensures we have permission to write to the shared volume
         permissions:
             pull-requests: write
             contents: read
@@ -66,15 +68,17 @@ jobs:
 
             - name: Run Tests & Generate Coverage
               id: run-coverage
-              continue-on-error: true # Keep going even if coverage < 100%
-              run: cargo llvm-cov --fail-under-lines 100 --show-missing-lines --cobertura --output-path cobertura.xml
+              continue-on-error: true
+              run: |
+                  cargo llvm-cov --fail-under-lines 100 --show-missing-lines --cobertura --output-path cobertura.xml
+                  # Fix permissions so the next container (the reporter) can read it
+                  chmod 644 cobertura.xml
 
             - name: Parse Coverage XML to Markdown
-              id: coverage-summary
-              # We use a specific version and ensure the file path is relative to the workspace
               uses: irongut/CodeCoverageSummary@v1.3.0
               with:
-                  filename: ./cobertura.xml
+                  # Use the absolute path provided by GitHub's environment
+                  filename: ${{ github.workspace }}/cobertura.xml
                   badge: true
                   format: markdown
                   output: both
@@ -84,10 +88,8 @@ jobs:
               uses: thollander/actions-comment-pull-request@v2
               with:
                   filePath: code-coverage-results.md
-                  comment_tag: coverage-report # Overwrites old comments instead of spamming
+                  comment_tag: coverage-report
 
-            - name: Enforce Coverage Threshold
+            - name: Final Coverage Check
               if: steps.run-coverage.outcome == 'failure'
-              run: |
-                  echo "Error: Code coverage is below 100%."
-                  exit 1
+              run: exit 1
