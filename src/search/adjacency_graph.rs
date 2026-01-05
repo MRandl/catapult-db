@@ -1,3 +1,5 @@
+use std::hint::black_box;
+
 use crate::{
     numerics::{AlignedBlock, VectorLike},
     search::{
@@ -198,6 +200,8 @@ where
             }
             curr_points
         };
+
+        black_box(1);
 
         found_neighbors
     }
