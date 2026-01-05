@@ -1,0 +1,97 @@
+name: Rust CI
+
+on:
+    push:
+        branches: ["main", "master"]
+    pull_request:
+        branches: ["main", "master"]
+
+jobs:
+    run-tests-release:
+        runs-on: ubuntu-latest
+        container: randlflep/rust-ci
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Check versions
+              run: rustc --version && cargo --version
+
+            - name: Run tests (Release)
+              run: cargo test --release --verbose
+
+    run-tests-debug:
+        runs-on: ubuntu-latest
+        container: randlflep/rust-ci
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Check versions
+              run: rustc --version && cargo --version
+
+            - name: Run tests (Debug)
+              run: cargo test --verbose
+
+    clippy:
+        runs-on: ubuntu-latest
+        container: randlflep/rust-ci
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Run Clippy
+              run: cargo clippy --all-targets -- -D warnings
+
+    format-check:
+        runs-on: ubuntu-latest
+        container: randlflep/rust-ci
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Check Formatting
+              run: cargo fmt -- --check
+
+    jacoco-enforce:
+        runs-on: ubuntu-latest
+        container:
+            image: randlflep/rust-ci
+            options: --user root # Ensures we have permission to write to the shared volume
+        permissions:
+            pull-requests: write
+            contents: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Run Tests & Generate Coverage
+              id: run-coverage
+              continue-on-error: true
+              run: |
+                  cargo llvm-cov --fail-under-lines 100 --show-missing-lines --cobertura --output-path cobertura.xml
+                  chmod 644 cobertura.xml
+
+            - name: Parse Coverage XML to Markdown
+              # Only run this if the file was actually created
+              uses: irongut/CodeCoverageSummary@v1.3.0
+              with:
+                  # Use a relative path instead of an absolute one
+                  filename: cobertura.xml
+                  badge: true
+                  format: markdown
+                  output: both
+
+            - name: Post PR Comment
+              if: github.event_name == 'pull_request' && hashFiles('code-coverage-results.md') != ''
+              uses: thollander/actions-comment-pull-request@v2
+              with:
+                  filePath: code-coverage-results.md
+                  comment_tag: coverage-report
+
+            - name: Final Coverage Check
+              if: steps.run-coverage.outcome == 'failure'
+              run: |
+                  echo "Coverage is below 100%!"
+                  exit 1
