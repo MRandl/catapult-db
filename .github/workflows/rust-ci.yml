@@ -1,0 +1,80 @@
+name: Rust CI
+
+on:
+    push:
+        branches: ["main", "master"]
+    pull_request:
+        branches: ["main", "master"]
+
+jobs:
+    run-tests-release:
+        runs-on: ubuntu-latest
+        container: randlflep/rust-ci
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Check versions
+              run: rustc --version && cargo --version
+
+            - name: Run tests (Release)
+              run: cargo test --release --verbose
+
+    run-tests-debug:
+        runs-on: ubuntu-latest
+        container: randlflep/rust-ci
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Check versions
+              run: rustc --version && cargo --version
+
+            - name: Run tests (Debug)
+              run: cargo test --verbose
+
+    clippy:
+        runs-on: ubuntu-latest
+        container: randlflep/rust-ci
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Run Clippy
+              run: cargo clippy --all-targets -- -D warnings
+
+    format-check:
+        runs-on: ubuntu-latest
+        container: randlflep/rust-ci
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Check Formatting
+              run: cargo fmt -- --check
+
+    jacoco-enforce:
+        runs-on: ubuntu-latest
+        container: randlflep/rust-ci
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Run Tests & Check Coverage
+              # --fail-under-lines 100: Causes the job to fail if coverage is < 100%
+              # --show-missing-lines: Prints the specific lines (e.g., src/main.rs:45-47) that are not covered
+              run: cargo llvm-cov --fail-under-lines 100 --show-missing-lines
+
+            # Optional: Generate XML only if you still want the artifact upload.
+            # We use 'if: always()' so this runs even if the 100% check fails above,
+            # allowing you to download the report for deeper analysis if needed.
+            - name: Generate Cobertura Report
+              if: always()
+              run: cargo llvm-cov report --cobertura --output-path target/llvm-cov-target/cobertura.xml
+
+            - name: Upload Coverage Artifact
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: coverage-report
+                  path: target/llvm-cov-target/cobertura.xml
