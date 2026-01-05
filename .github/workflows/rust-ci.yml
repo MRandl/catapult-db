@@ -71,20 +71,20 @@ jobs:
               continue-on-error: true
               run: |
                   cargo llvm-cov --fail-under-lines 100 --show-missing-lines --cobertura --output-path cobertura.xml
-                  # Fix permissions so the next container (the reporter) can read it
                   chmod 644 cobertura.xml
 
             - name: Parse Coverage XML to Markdown
+              # Only run this if the file was actually created
               uses: irongut/CodeCoverageSummary@v1.3.0
               with:
-                  # Use the absolute path provided by GitHub's environment
-                  filename: ${{ github.workspace }}/cobertura.xml
+                  # Use a relative path instead of an absolute one
+                  filename: cobertura.xml
                   badge: true
                   format: markdown
                   output: both
 
             - name: Post PR Comment
-              if: github.event_name == 'pull_request'
+              if: github.event_name == 'pull_request' && hashFiles('code-coverage-results.md') != ''
               uses: thollander/actions-comment-pull-request@v2
               with:
                   filePath: code-coverage-results.md
@@ -92,4 +92,6 @@ jobs:
 
             - name: Final Coverage Check
               if: steps.run-coverage.outcome == 'failure'
-              run: exit 1
+              run: |
+                  echo "Coverage is below 100%!"
+                  exit 1
