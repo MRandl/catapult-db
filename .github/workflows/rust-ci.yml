@@ -56,25 +56,35 @@ jobs:
     jacoco-enforce:
         runs-on: ubuntu-latest
         container: randlflep/rust-ci
+        # We need these permissions to post comments on Pull Requests
+        permissions:
+            pull-requests: write
+            contents: read
+
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
 
-            - name: Run Tests & Check Coverage
-              # --fail-under-lines 100: Causes the job to fail if coverage is < 100%
-              # --show-missing-lines: Prints the specific lines (e.g., src/main.rs:45-47) that are not covered
-              run: cargo llvm-cov --fail-under-lines 100 --show-missing-lines
+            - name: Run Tests & Generate Coverage
+              # We generate the report first so the parser can read it
+              run: cargo llvm-cov --fail-under-lines 100 --show-missing-lines --cobertura --output-path cobertura.xml
 
-            # Optional: Generate XML only if you still want the artifact upload.
-            # We use 'if: always()' so this runs even if the 100% check fails above,
-            # allowing you to download the report for deeper analysis if needed.
-            - name: Generate Cobertura Report
-              if: always()
-              run: cargo llvm-cov report --cobertura --output-path target/llvm-cov-target/cobertura.xml
-
-            - name: Upload Coverage Artifact
-              if: always()
-              uses: actions/upload-artifact@v4
+            - name: Parse Coverage XML
+              id: coverage-summary
+              uses: irongut/CodeCoverageSummary@v1.3.0
               with:
-                  name: coverage-report
-                  path: target/llvm-cov-target/cobertura.xml
+                  filename: cobertura.xml
+                  badge: true
+                  fail_below_min: true # Also fails if under 100
+                  format: markdown
+                  hide_branch_rate: false
+                  hide_complexity: true
+                  indicators: true
+                  output: both # Generates both a file and a console summary
+
+            - name: Add Coverage PR Comment
+              uses: maroon1/workflow-printer@v1.1.0 # Simple tool to post the markdown to PR
+              if: github.event_name == 'pull_request'
+              with:
+                  comment-identifier: "coverage-report"
+                  file-path: code-coverage-results.md
