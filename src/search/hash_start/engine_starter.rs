@@ -46,7 +46,6 @@ impl EngineStarter {
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::numerics::SIMD_LANECOUNT;
@@ -89,7 +88,7 @@ mod tests {
 
         // All indices should be within [0, graph_size)
         for &idx in &points {
-            assert!(idx < graph_size, "Index {} out of bounds", idx);
+            assert!(idx < graph_size, "Index {idx} out of bounds");
         }
     }
 
@@ -104,11 +103,7 @@ mod tests {
         let mut sorted_points = points.clone();
         sorted_points.sort_unstable();
         sorted_points.dedup();
-        assert_eq!(
-            sorted_points.len(),
-            points.len(),
-            "Indices should be unique"
-        );
+        assert_eq!(sorted_points.len(), points.len());
     }
 
     #[test]
@@ -232,7 +227,7 @@ mod tests {
     #[test]
     fn test_consistency_across_multiple_calls() {
         let starter = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
-        let query = create_test_query(3.14);
+        let query = create_test_query(3.0);
 
         let points1 = starter.select_starting_points(&query, 15);
         let points2 = starter.select_starting_points(&query, 15);

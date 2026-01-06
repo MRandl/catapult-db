@@ -119,7 +119,7 @@ mod tests {
         let values = vec![7, 8, 9];
         let fixed_set: FixedSet<FlatSearch> = FixedSet::new(values);
 
-        let debug_string = format!("{:?}", fixed_set);
+        let debug_string = format!("{fixed_set:?}");
 
         assert!(debug_string.contains("FixedSet"));
         assert!(debug_string.contains("neighbors"));

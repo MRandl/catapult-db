@@ -1,5 +1,3 @@
-use std::hint::black_box;
-
 use crate::{
     numerics::{AlignedBlock, VectorLike},
     search::{
@@ -132,7 +130,7 @@ where
             let regular_neighbors = &best_candidate_node.neighbors.to_box(level);
             candidates.insert_batch(&self.distances_from_indices(regular_neighbors, query));
 
-            if SearchAlgo::any_catapults_enabled(self.catapults) {
+            if SearchAlgo::local_catapults_enabled(self.catapults) {
                 let catapult_neighbors = &best_candidate_node.catapults.read().unwrap().to_vec();
                 candidates.insert_batch(&self.distances_from_indices(catapult_neighbors, query));
             }
@@ -181,17 +179,17 @@ where
     EvictPolicy: CatapultEvictingStructure,
 {
     pub fn beam_search(&self, query: &[AlignedBlock], k: usize, beam_width: usize) -> Vec<usize> {
-        let mut curr_points = self.starter.select_starting_points(query, k);
-
+        let starting_points = self.starter.select_starting_points(query, k);
         // if there is an interesting catapult in the starting set, we immediately start
         // at the bottom level (only in catapult finalizing mode, see graph_hierarchy.rs)
         let found_neighbors = if self.catapults == HNSWCatapultChoice::FinalizingCatapults
             && let Some(catapulted_zero_neighbors) =
-                self.try_catapulting_beam(query, k, beam_width, &curr_points)
+                self.try_catapulting_beam(query, k, beam_width, &starting_points)
         {
             // we found a somewhat promising catapult to level 0, so we search level 0 directly
             catapulted_zero_neighbors
         } else {
+            let mut curr_points = starting_points.clone();
             for curr_level in (0..=self.starter.max_level).rev() {
                 // note: curr_points maintains a size of k (<= beam_width) even though two consecutive
                 // beam search calls work with beam_width elements, which may be suboptimal.
@@ -201,7 +199,18 @@ where
             curr_points
         };
 
-        black_box(1);
+        if self.catapults == HNSWCatapultChoice::FinalizingCatapults {
+            let best_starting_node = self
+                .distances_from_indices(&starting_points, query)
+                .into_iter()
+                .min()
+                .unwrap();
+            self.adjacency[best_starting_node.index]
+                .catapults
+                .write()
+                .unwrap()
+                .insert(found_neighbors[0]);
+        }
 
         found_neighbors
     }
@@ -266,7 +275,9 @@ mod tests {
     use crate::{
         numerics::SIMD_LANECOUNT,
         search::{
-            graph_hierarchy::{FlatCatapultChoice, FlatSearch},
+            graph_hierarchy::{
+                FlatCatapultChoice, FlatSearch, HNSWCatapultChoice, HNSWEngineStarter, HNSWSearch,
+            },
             hash_start::EngineStarter,
         },
         sets::catapults::{FixedSet, UnboundedNeighborSet},
@@ -305,10 +316,10 @@ mod tests {
                 neighbors: FixedSet::new(vec![4]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
-            // 4: Pos 40.0, Neighbors: []
+            // 4: Pos 40.0, Neighbors: [1]
             Node {
                 payload: vec![AlignedBlock::new([40.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![]),
+                neighbors: FixedSet::new(vec![1]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
@@ -337,7 +348,7 @@ mod tests {
         assert_eq!(results[0], 1);
         assert_eq!(results[1], 2);
 
-        // Expanded: 0 (1 edge) + 1 (1 edge) + 2 (2 edges) + 0 (1 edge) = 5 edges
+        // Expanded: 0 (1 edge) + 1 (1 edge) + 2 (2 edges) + 3 (1 edge) + 4 (1 edge) = 6 edges
         assert_eq!(
             graph
                 .adjacency
@@ -346,7 +357,7 @@ mod tests {
                     n.catapults.read().unwrap().to_vec().len() + n.neighbors.to_box(()).len()
                 })
                 .sum::<usize>(),
-            6
+            7
         );
         assert_eq!(
             graph
@@ -354,7 +365,7 @@ mod tests {
                 .iter()
                 .map(|n| { n.neighbors.to_box(()).len() })
                 .sum::<usize>(),
-            5
+            6
         );
     }
 
@@ -461,5 +472,228 @@ mod tests {
                 .map(|n| n.catapults.read().unwrap())
                 .all(|cats| cats.to_vec().is_empty() || cats.to_vec() == vec![4])
         );
+    }
+
+    // HNSW Tests
+    // Note: Currently FixedSet returns the same neighbors for all levels,
+    // so these tests have the same graph topology as FlatSearch tests
+
+    fn setup_hnsw_graph() -> AdjacencyGraph<UnboundedNeighborSet, HNSWSearch> {
+        let nodes = vec![
+            // 0: Pos 0.0, Neighbors: [1]
+            Node {
+                payload: vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![1]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 1: Pos 10.0, Neighbors: [2]
+            Node {
+                payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![2]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 2: Pos 20.0, Neighbors: [1, 3]
+            Node {
+                payload: vec![AlignedBlock::new([20.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![1, 3]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 3: Pos 30.0, Neighbors: [4]
+            Node {
+                payload: vec![AlignedBlock::new([30.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![4]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 4: Pos 40.0, Neighbors: [1]
+            Node {
+                payload: vec![AlignedBlock::new([40.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![1]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+        ];
+
+        AdjacencyGraph::new(
+            nodes,
+            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 5, Some(42)), 2),
+            HNSWCatapultChoice::CatapultsDisabled,
+        )
+    }
+
+    #[test]
+    fn test_hnsw_basic_search_path() {
+        let graph = setup_hnsw_graph();
+        let query = vec![AlignedBlock::new([11.0; SIMD_LANECOUNT])];
+        let k = 2;
+        let beam_width = 3;
+
+        // Query at 11.0, distances: 0(121), 1(1), 2(81), 3(361), 4(841)
+        let results = graph.beam_search(&query, k, beam_width);
+
+        // HNSW should return exactly k results
+        assert_eq!(results.len(), k);
+
+        // All returned indices should be valid (within graph bounds)
+        assert_eq!(results, vec![1, 2]);
+    }
+
+    #[test]
+    fn test_hnsw_multiple_starting_points() {
+        let nodes = vec![
+            // 0: Pos 100.0, Neighbors: [2]
+            Node {
+                payload: vec![AlignedBlock::new([100.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::<HNSWSearch>::new(vec![2]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 1: Pos 0.0, Neighbors: [0] (BEST overall)
+            Node {
+                payload: vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![0]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 2: Pos 5.0, Neighbors: [1]
+            Node {
+                payload: vec![AlignedBlock::new([5.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![1]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+        ];
+
+        let graph = AdjacencyGraph::new(
+            nodes,
+            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 3, Some(42)), 1),
+            HNSWCatapultChoice::CatapultsDisabled,
+        );
+
+        let query = vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])];
+        let k = 2;
+        let beam_width = 3;
+
+        let results = graph.beam_search(&query, k, beam_width);
+
+        // Should find nodes 1 and 2 as the nearest
+        assert_eq!(results.len(), k);
+        assert_eq!(results[0], 1);
+        assert_eq!(results[1], 2);
+    }
+
+    #[test]
+    fn test_hnsw_complex_search_divergence() {
+        // HNSW graph with a distant dead end
+        let nodes: Vec<Node<UnboundedNeighborSet, HNSWSearch>> = vec![
+            // 0: Pos 10.0, Neighbors: [1, 5]
+            Node {
+                payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![1, 5]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 1: Pos 8.0, Neighbors: [2]
+            Node {
+                payload: vec![AlignedBlock::new([8.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![2]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 2: Pos 5.0, Neighbors: [3]
+            Node {
+                payload: vec![AlignedBlock::new([5.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![3]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 3: Pos 2.0, Neighbors: [4]
+            Node {
+                payload: vec![AlignedBlock::new([2.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![4]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 4: Pos 1.0, Neighbors: [] (globally BEST)
+            Node {
+                payload: vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 5: Pos 100.0, Neighbors: [] (distant dead end)
+            Node {
+                payload: vec![AlignedBlock::new([100.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+        ];
+
+        let graph = AdjacencyGraph::new(
+            nodes,
+            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 6, Some(42)), 2),
+            HNSWCatapultChoice::SameLevelCatapults,
+        );
+
+        let query = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])];
+        let k = 1;
+        let beam_width = 2;
+
+        let results = graph.beam_search(&query, k, beam_width);
+
+        // Should find node 4 as the best result
+        assert_eq!(results.len(), k);
+        assert_eq!(results[0], 4);
+    }
+
+    #[test]
+    fn test_hnsw_finalizing_catapuls() {
+        // HNSW graph with a distant dead end
+        let nodes: Vec<Node<UnboundedNeighborSet, HNSWSearch>> = vec![
+            // 0: Pos 10.0, Neighbors: [1, 5]
+            Node {
+                payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![1, 5]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 1: Pos 8.0, Neighbors: [2]
+            Node {
+                payload: vec![AlignedBlock::new([8.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![2]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 2: Pos 5.0, Neighbors: [3]
+            Node {
+                payload: vec![AlignedBlock::new([5.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![3]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 3: Pos 2.0, Neighbors: [4]
+            Node {
+                payload: vec![AlignedBlock::new([2.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![4]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 4: Pos 1.0, Neighbors: [5] (globally BEST)
+            Node {
+                payload: vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![5]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 5: Pos 100.0, Neighbors: [0]
+            Node {
+                payload: vec![AlignedBlock::new([100.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FixedSet::new(vec![0]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+        ];
+
+        let graph = AdjacencyGraph::new(
+            nodes,
+            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 6, Some(42)), 2),
+            HNSWCatapultChoice::FinalizingCatapults,
+        );
+
+        let query = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])];
+        let k = 1;
+        let beam_width = 2;
+
+        let results1 = graph.beam_search(&query, k, beam_width);
+        let results2 = graph.beam_search(&query, k, beam_width);
+
+        // Should find node 4 as the best result
+        assert_eq!(results1.len(), k);
+        assert_eq!(results1[0], 4);
+        assert_eq!(results1, results2);
     }
 }

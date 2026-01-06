@@ -1,5 +1,4 @@
 #![feature(portable_simd)]
-#![feature(coverage_attribute)]
 
 pub mod fs;
 pub mod numerics;

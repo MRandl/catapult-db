@@ -38,7 +38,7 @@ impl VectorLike for [AlignedBlock] {
     /// # Panics
     ///
     /// Panics if the two vectors have different lengths
-    #[inline(never)]
+    #[inline]
     fn l2_squared(&self, othr: &[AlignedBlock]) -> f32 {
         assert_eq!(self.len(), othr.len());
         //assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
