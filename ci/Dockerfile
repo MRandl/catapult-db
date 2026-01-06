@@ -1,0 +1,3 @@
+FROM rustlang/rust:nightly
+
+RUN apt update -y && apt upgrade -y && apt install -y valgrind gh && rustup component add clippy rustfmt && cargo install cargo-valgrind && cargo install cargo-llvm-cov
