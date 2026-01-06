@@ -105,7 +105,7 @@ mod tests {
         for cap in [1usize, 7, 8, 9, 16, 31, 32, 33] {
             let bs = UncompressedSet::new(cap);
             for i in 0..cap {
-                assert!(!bs.get(i), "bit {} should start cleared for cap {}", i, cap);
+                assert!(!bs.get(i), "bit {i} should start cleared for cap {cap}");
             }
         }
     }
@@ -119,7 +119,7 @@ mod tests {
         let to_set = [0usize, 1, 7, 8, 15, 16, 31, 32, 39];
         for &i in &to_set {
             bs.set(i);
-            assert!(bs.get(i), "bit {} should be set", i);
+            assert!(bs.get(i), "bit {i} should be set");
         }
 
         // Verify every position: set ones are 1, others are 0.
@@ -129,14 +129,8 @@ mod tests {
         }
 
         for (i, &groundtruth) in expected.iter().enumerate() {
-            assert_eq!(
-                bs.get(i),
-                groundtruth,
-                "bit {} expected {}, found {}",
-                i,
-                groundtruth,
-                bs.get(i)
-            );
+            let got = bs.get(i);
+            assert_eq!(got, groundtruth);
         }
     }
 
@@ -177,7 +171,7 @@ mod tests {
         }
         for i in 0..cap {
             let expected = i % 3 == 0;
-            assert_eq!(bs.get(i), expected, "mismatch at {}", i);
+            assert_eq!(bs.get(i), expected, "mismatch at {i}");
         }
 
         // Overwrite to dense: now set all bits
@@ -195,12 +189,7 @@ mod tests {
             let last = cap - 1;
             let mut bs = UncompressedSet::new(cap);
             bs.set(last);
-            assert!(
-                bs.get(last),
-                "last bit {} should be set for cap {}",
-                last,
-                cap
-            );
+            assert!(bs.get(last), "last bit {last} should be set for cap {cap}",);
         }
     }
 

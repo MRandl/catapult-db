@@ -52,7 +52,7 @@ mod tests {
 
         // Check various indices are all false
         for i in [0, 1, 100, 1000, 10000, 100000] {
-            assert!(!bitset.get(i), "index {} should be false in new bitset", i);
+            assert!(!bitset.get(i), "index {i} should be false in new bitset");
         }
     }
 
@@ -107,7 +107,7 @@ mod tests {
 
         // Verify all set bits
         for &idx in &indices {
-            assert!(bitset.get(idx), "index {} should be set", idx);
+            assert!(bitset.get(idx), "index {idx} should be set");
         }
 
         // Verify some unset bits
@@ -187,12 +187,12 @@ mod tests {
         }
 
         for i in 0..1000 {
-            assert!(bitset.get(i), "bit {} should be set", i);
+            assert!(bitset.get(i), "bit {i} should be set");
         }
 
         // Bits beyond should be clear
         for i in 1000..2000 {
-            assert!(!bitset.get(i), "bit {} should be clear", i);
+            assert!(!bitset.get(i), "bit {i} should be clear");
         }
     }
 
@@ -207,20 +207,12 @@ mod tests {
 
         // Verify even pages have bit set
         for page_num in (0..10).step_by(2) {
-            assert!(
-                bitset.get(page_num * PAGE_SIZE_BITS),
-                "page {} should have bit set",
-                page_num
-            );
+            assert!(bitset.get(page_num * PAGE_SIZE_BITS));
         }
 
         // Verify odd pages don't have that bit set
         for page_num in (1..10).step_by(2) {
-            assert!(
-                !bitset.get(page_num * PAGE_SIZE_BITS),
-                "page {} should not have bit set",
-                page_num
-            );
+            assert!(!bitset.get(page_num * PAGE_SIZE_BITS));
         }
     }
 

@@ -37,7 +37,11 @@ mod tests {
     fn new_page_all_bits_cleared() {
         let page = Page::new();
         for i in 0..PAGE_SIZE_BITS {
-            assert!(!page.get(i), "bit {} should be cleared on new page", i);
+            assert!(!page.get(i), "bit {i} should be cleared on new page");
+        }
+        let page_default = Page::default();
+        for i in 0..PAGE_SIZE_BITS {
+            assert!(!page_default.get(i));
         }
     }
 
@@ -59,13 +63,13 @@ mod tests {
 
         for &pos in &boundary_positions {
             page.set(pos);
-            assert!(page.get(pos), "bit {} should be set", pos);
+            assert!(page.get(pos), "bit {pos} should be set");
         }
 
         // Verify all set positions
         for i in 0..PAGE_SIZE_BITS {
             let expected = boundary_positions.contains(&i);
-            assert_eq!(page.get(i), expected, "bit {} mismatch", i);
+            assert_eq!(page.get(i), expected, "bit {i} mismatch");
         }
     }
 
@@ -93,12 +97,12 @@ mod tests {
 
         // Verify first u64 all set
         for i in 0..64 {
-            assert!(page.get(i), "bit {} should be set", i);
+            assert!(page.get(i), "bit {i} should be set");
         }
 
         // Verify rest still cleared
         for i in 64..PAGE_SIZE_BITS {
-            assert!(!page.get(i), "bit {} should be cleared", i);
+            assert!(!page.get(i), "bit {i} should be cleared");
         }
     }
 
@@ -113,7 +117,7 @@ mod tests {
 
         for i in 0..PAGE_SIZE_BITS {
             let expected = i % 100 == 0;
-            assert_eq!(page.get(i), expected, "bit {} mismatch", i);
+            assert_eq!(page.get(i), expected, "bit {i} mismatch");
         }
     }
 
@@ -126,7 +130,7 @@ mod tests {
         }
 
         for i in 0..PAGE_SIZE_BITS {
-            assert!(page.get(i), "bit {} should be set", i);
+            assert!(page.get(i));
         }
     }
 
@@ -151,16 +155,10 @@ mod tests {
 
         for chunk_idx in 0..PAGE_SIZE_U64 {
             let bit_pos = chunk_idx * 64;
-            assert!(
-                page.get(bit_pos),
-                "first bit of chunk {} should be set",
-                chunk_idx
-            );
+            assert!(page.get(bit_pos));
 
-            // Verify other bits in chunk are clear
-            if bit_pos + 1 < PAGE_SIZE_BITS {
-                assert!(!page.get(bit_pos + 1));
-            }
+            // Verify next bit in chunk is clear
+            assert!(!page.get(bit_pos + 1))
         }
     }
 
@@ -175,11 +173,7 @@ mod tests {
 
         for chunk_idx in 0..PAGE_SIZE_U64 {
             let bit_pos = chunk_idx * 64 + 63;
-            assert!(
-                page.get(bit_pos),
-                "last bit of chunk {} should be set",
-                chunk_idx
-            );
+            assert!(page.get(bit_pos));
 
             // Verify previous bit is clear
             assert!(!page.get(bit_pos - 1));

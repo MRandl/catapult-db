@@ -32,12 +32,12 @@ impl Queries for Vec<Vec<AlignedBlock>> {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn test_load_4vecs() {
-//         let _ = Vec::<Vec<AlignedBlock>>::load_from_npy("test_index/4vecs/4vecs.npy");
-//     }
-// }
+    #[test]
+    fn test_load_4vecs() {
+        let _ = Vec::<Vec<AlignedBlock>>::load_from_npy("test_index/vectors.npy");
+    }
+}

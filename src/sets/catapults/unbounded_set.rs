@@ -1,19 +1,8 @@
 use crate::sets::catapults::CatapultEvictingStructure;
 
+#[derive(Debug)]
 pub struct UnboundedNeighborSet {
     neighbors: Vec<usize>,
-}
-
-impl UnboundedNeighborSet {
-    pub fn new() -> Self {
-        UnboundedNeighborSet { neighbors: vec![] }
-    }
-}
-
-impl Default for UnboundedNeighborSet {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl CatapultEvictingStructure for UnboundedNeighborSet {

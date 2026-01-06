@@ -10,10 +10,6 @@ impl AlignedBlock {
     pub fn new(data: [f32; SIMD_LANECOUNT]) -> Self {
         AlignedBlock { data }
     }
-
-    pub fn data(&self) -> &[f32; SIMD_LANECOUNT] {
-        &self.data
-    }
 }
 
 #[cfg(test)]

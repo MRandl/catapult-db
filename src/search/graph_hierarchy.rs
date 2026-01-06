@@ -6,7 +6,6 @@ pub trait GraphSearchAlgorithm {
     type StartingPointSelector;
 
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool;
-    fn any_catapults_enabled(strategy: Self::CatapultChoice) -> bool;
 }
 
 // search mode 1: Flat search, where one search is performed on a big graph.
@@ -29,10 +28,6 @@ impl GraphSearchAlgorithm for FlatSearch {
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
         strategy == FlatCatapultChoice::CatapultsEnabled
     }
-
-    fn any_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
-        strategy == FlatCatapultChoice::CatapultsEnabled
-    }
 }
 
 // Search mode 2: HNSW, which makes use of stacked graphs which get progressively denser
@@ -47,6 +42,10 @@ pub struct HNSWEngineStarter {
 }
 
 impl HNSWEngineStarter {
+    pub fn new(hasher: EngineStarter, max_level: u32) -> Self {
+        HNSWEngineStarter { hasher, max_level }
+    }
+
     pub fn select_starting_points(&self, query: &[AlignedBlock], k: usize) -> Vec<usize> {
         self.hasher.select_starting_points(query, k)
     }
@@ -67,9 +66,5 @@ impl GraphSearchAlgorithm for HNSWSearch {
 
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
         strategy == HNSWCatapultChoice::SameLevelCatapults
-    }
-
-    fn any_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
-        strategy != HNSWCatapultChoice::CatapultsDisabled
     }
 }

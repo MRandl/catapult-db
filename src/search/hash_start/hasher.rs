@@ -55,7 +55,7 @@ impl SimilarityHasher {
     /// Hashes `vector` to a `k`-length binary signature.
     #[allow(unused)]
     pub fn hash(&self, vector: &[AlignedBlock]) -> Vec<bool> {
-        debug_assert!(
+        assert!(
             vector.len() == self.stored_vectors_dim / SIMD_LANECOUNT,
             "input vector has wrong dimension"
         );
@@ -135,10 +135,7 @@ mod tests {
         let h2 = hasher.hash(&v2);
 
         let hamming_distance: usize = h1.iter().zip(&h2).filter(|(a, b)| a != b).count();
-        assert!(
-            hamming_distance > 0,
-            "Orthogonal vectors should be likely to hash differently"
-        );
+        assert!(hamming_distance > 0);
     }
 
     #[test]
@@ -164,5 +161,30 @@ mod tests {
         // Expect: dot([2,-3], [1,0]) = 2 → true
         //         dot([2,-3], [0,1]) = -3 → false
         assert_eq!(result, vec![true, false]);
+    }
+
+    #[test]
+    #[should_panic(expected = "dim must be multiple of SIMD_LANECOUNT")]
+    fn test_panics_on_non_multiple_dimension() {
+        // Line 29: dim not multiple of SIMD_LANECOUNT
+        let _ = SimilarityHasher::new_seeded(8, SIMD_LANECOUNT + 1, 42);
+    }
+
+    #[test]
+    #[should_panic(expected = "input vector has wrong dimension")]
+    fn test_hash_panics_on_wrong_dimension() {
+        // Line 58: vector length doesn't match
+        let hasher = SimilarityHasher::new_seeded(8, SIMD_LANECOUNT * 2, 42);
+        let wrong_vec = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])]; // Only 1 block instead of 2
+        let _ = hasher.hash(&wrong_vec);
+    }
+
+    #[test]
+    #[should_panic(expected = "input vector has wrong dimension")]
+    fn test_hash_int_panics_on_wrong_dimension() {
+        // Line 72: vector length doesn't match
+        let hasher = SimilarityHasher::new_seeded(8, SIMD_LANECOUNT * 2, 42);
+        let wrong_vec = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])]; // Only 1 block instead of 2
+        let _ = hasher.hash_int(&wrong_vec);
     }
 }

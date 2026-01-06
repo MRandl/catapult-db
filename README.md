@@ -1,14 +1,12 @@
-# CatapultDB
+# CatapultDB 
+
 
 Yet another fast approximate nearest neighbor (ANN) search library in Rust.
 It is based on a proximity graph data structure that enables fast nearest neighbor search at the cost of being approximate.
 We improve by quite a long shot over the current SoTA by inserting edges that 'remember' past trajectories in the 
 graph data structure. These special history-based edges are nicknamed 'catapults'.
 
-## Requirements
-
-- Rust nightly (uses `#![feature(portable_simd)]`)
-- Vectors must be multiples of 8 elements (SIMD lane count). This is enforced at file loading time and at every call for beam search.
+Requires Rust nightly (uses `#![feature(portable_simd)]`). Any cargo/Rust install will be able to handle this repo, possibly by downloading some extras for your compiler.
 
 ## Building
 

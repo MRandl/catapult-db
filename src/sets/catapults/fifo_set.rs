@@ -212,4 +212,21 @@ mod tests {
         assert_eq!(fifo.queue[0], 9900);
         assert_eq!(fifo.queue[99], 9999);
     }
+
+    #[test]
+    fn test_debug() {
+        let mut fifo = FifoSet::<3>::new();
+        fifo.insert(1);
+        fifo.insert(2);
+
+        let debug_str = format!("{fifo:?}");
+        assert_eq!(debug_str, "FifoSet { capacity: 3, queue: [1, 2] }");
+    }
+
+    #[test]
+    fn test_default() {
+        let fifo: FifoSet<5> = FifoSet::default();
+        assert_eq!(fifo.queue.len(), 0);
+        assert_eq!(fifo.queue.capacity(), 5);
+    }
 }

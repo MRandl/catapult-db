@@ -190,11 +190,7 @@ mod tests {
         // Insert the same item multiple times
         sk.insert_batch(&[entry(1.0, 100), entry(1.0, 100), entry(2.0, 200)]);
 
-        assert_eq!(
-            sk.sorted_members.len(),
-            2,
-            "Should have ignored identical duplicate"
-        );
+        assert_eq!(sk.sorted_members.len(), 2);
     }
 
     #[test]
