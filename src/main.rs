@@ -48,7 +48,7 @@ fn main() {
 
     // Load the adjacency graph from file
     println!("Loading adjacency graph...");
-    let adjacency = AdjacencyGraph::<FifoSet<30>, FlatSearch>::load_from_path::<LOAD_LI_ENDIAN>(
+    let adjacency = AdjacencyGraph::<FifoSet<30>, FlatSearch>::load_flat_from_path::<LOAD_LI_ENDIAN>(
         PathBuf::from_str(&args.graph).unwrap(),
         PathBuf::from_str(&args.payload).unwrap(),
     );
@@ -64,7 +64,7 @@ fn main() {
     let engine_seed = Some(42);
     let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
 
-    let full_graph = Arc::new(AdjacencyGraph::new(
+    let full_graph = Arc::new(AdjacencyGraph::<_, FlatSearch>::new(
         adjacency,
         engine,
         if args.catapults {
