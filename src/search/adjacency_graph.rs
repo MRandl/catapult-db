@@ -2,13 +2,16 @@ use crate::{
     numerics::{AlignedBlock, VectorLike},
     search::{
         HNSWCatapultChoice,
-        graph_hierarchy::{FlatSearch, GraphSearchAlgorithm, HNSWSearch},
+        graph_hierarchy::{
+            FlatCatapultChoice, FlatSearch, GraphSearchAlgorithm, HNSWEngineStarter, HNSWSearch,
+        },
+        hash_start::EngineStarter,
         node::Node,
     },
     sets::{
         candidates::{CandidateEntry, SmallestKCandidates},
         catapults::CatapultEvictingStructure,
-        fixed::FixedSet,
+        fixed::{FixedSet, FlatFixedSet, HierarchicalFixedSet},
         visited::{CompressedBitset, VisitorSet},
     },
 };
@@ -34,15 +37,14 @@ where
     catapults: Algo::CatapultChoice,
 }
 
-impl<EvictPolicy, SearchAlgo> AdjacencyGraph<EvictPolicy, SearchAlgo>
+impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
 where
     EvictPolicy: CatapultEvictingStructure,
-    SearchAlgo: GraphSearchAlgorithm,
 {
-    pub fn new(
-        adj: Vec<Node<EvictPolicy, SearchAlgo::FixedSetType>>,
-        engine: SearchAlgo::StartingPointSelector,
-        catapults: SearchAlgo::CatapultChoice,
+    pub fn new_flat(
+        adj: Vec<Node<EvictPolicy, FlatFixedSet>>,
+        engine: EngineStarter,
+        catapults: FlatCatapultChoice,
     ) -> Self {
         Self {
             adjacency: adj,
@@ -50,7 +52,30 @@ where
             catapults,
         }
     }
+}
 
+impl<EvictPolicy> AdjacencyGraph<EvictPolicy, HNSWSearch>
+where
+    EvictPolicy: CatapultEvictingStructure,
+{
+    pub fn new_hnsw(
+        adj: Vec<Node<EvictPolicy, HierarchicalFixedSet>>,
+        engine: HNSWEngineStarter,
+        catapults: HNSWCatapultChoice,
+    ) -> Self {
+        Self {
+            adjacency: adj,
+            starter: engine,
+            catapults,
+        }
+    }
+}
+
+impl<EvictPolicy, SearchAlgo> AdjacencyGraph<EvictPolicy, SearchAlgo>
+where
+    EvictPolicy: CatapultEvictingStructure,
+    SearchAlgo: GraphSearchAlgorithm,
+{
     fn distances_from_indices(
         &self,
         indices: &[usize],
@@ -328,7 +353,7 @@ mod tests {
             },
         ];
         // Start from node 0
-        AdjacencyGraph::new(
+        AdjacencyGraph::new_flat(
             nodes,
             EngineStarter::new(4, SIMD_LANECOUNT, 4, Some(42)),
             FlatCatapultChoice::CatapultsEnabled,
@@ -396,7 +421,7 @@ mod tests {
             },
         ];
         // Start points: 0, 2
-        let graph = AdjacencyGraph::<_, FlatSearch>::new(
+        let graph = AdjacencyGraph::new_flat(
             nodes,
             EngineStarter::new(4, SIMD_LANECOUNT, 3, Some(42)),
             FlatCatapultChoice::CatapultsEnabled,
@@ -453,7 +478,7 @@ mod tests {
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
-        let graph = AdjacencyGraph::<_, FlatSearch>::new(
+        let graph = AdjacencyGraph::new_flat(
             nodes,
             EngineStarter::new(4, SIMD_LANECOUNT, 5, Some(42)),
             FlatCatapultChoice::CatapultsEnabled,
@@ -514,7 +539,7 @@ mod tests {
             },
         ];
 
-        AdjacencyGraph::new(
+        AdjacencyGraph::new_hnsw(
             nodes,
             HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 5, Some(42)), 0),
             HNSWCatapultChoice::CatapultsDisabled,
@@ -561,7 +586,7 @@ mod tests {
             },
         ];
 
-        let graph = AdjacencyGraph::<_, HNSWSearch>::new(
+        let graph = AdjacencyGraph::new_hnsw(
             nodes,
             HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 3, Some(42)), 0),
             HNSWCatapultChoice::CatapultsDisabled,
@@ -621,7 +646,7 @@ mod tests {
             },
         ];
 
-        let graph = AdjacencyGraph::<_, HNSWSearch>::new(
+        let graph = AdjacencyGraph::new_hnsw(
             nodes,
             HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 6, Some(42)), 0),
             HNSWCatapultChoice::SameLevelCatapults,
@@ -680,7 +705,7 @@ mod tests {
             },
         ];
 
-        let graph = AdjacencyGraph::<_, HNSWSearch>::new(
+        let graph = AdjacencyGraph::new_hnsw(
             nodes,
             HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 6, Some(42)), 0),
             HNSWCatapultChoice::FinalizingCatapults,

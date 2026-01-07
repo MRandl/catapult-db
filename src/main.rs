@@ -7,8 +7,6 @@ use catapult::{
 use clap::Parser;
 use std::{hint::black_box, path::PathBuf, str::FromStr, sync::Arc, thread};
 
-const LOAD_LI_ENDIAN: bool = cfg!(target_endian = "little");
-
 /// Vector search engine using adjacency graphs
 #[derive(Parser, Debug)]
 #[command(name = "catapult")]
@@ -44,11 +42,15 @@ struct Args {
 }
 
 fn main() {
+    const {
+        assert!(cfg!(target_endian = "little"));
+        // parsing DiskANN files requires little endian.
+    }
     let args = Args::parse();
 
     // Load the adjacency graph from file
     println!("Loading adjacency graph...");
-    let adjacency = AdjacencyGraph::<FifoSet<30>, FlatSearch>::load_flat_from_path::<LOAD_LI_ENDIAN>(
+    let adjacency = AdjacencyGraph::<FifoSet<30>, FlatSearch>::load_flat_from_path(
         PathBuf::from_str(&args.graph).unwrap(),
         PathBuf::from_str(&args.payload).unwrap(),
     );
@@ -64,7 +66,7 @@ fn main() {
     let engine_seed = Some(42);
     let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
 
-    let full_graph = Arc::new(AdjacencyGraph::<_, FlatSearch>::new(
+    let full_graph = Arc::new(AdjacencyGraph::new_flat(
         adjacency,
         engine,
         if args.catapults {

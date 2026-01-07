@@ -67,7 +67,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         Some(payload)
     }
 
-    pub fn load_flat_from_path<const LOAD_LI_ENDIAN: bool>(
+    pub fn load_flat_from_path(
         graph_path: PathBuf,
         payload_path: PathBuf,
     ) -> Vec<Node<T, FlatFixedSet>> {
@@ -131,8 +131,8 @@ mod tests {
     fn loading_example_graph() {
         let graph_path = "test_index/ann";
         let payload_path = "test_index/ann_vectors.bin";
-        const LITTLE_ENDIAN: bool = true;
-        let graphed = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path::<LITTLE_ENDIAN>(
+
+        let graphed = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
         );
