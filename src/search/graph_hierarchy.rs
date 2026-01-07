@@ -1,9 +1,13 @@
-use crate::{numerics::AlignedBlock, search::hash_start::EngineStarter};
+use crate::{
+    numerics::AlignedBlock,
+    search::hash_start::EngineStarter,
+    sets::fixed::{FixedSet, FlatFixedSet, HierarchicalFixedSet},
+};
 
 pub trait GraphSearchAlgorithm {
-    type LevelContext: Clone + Copy;
     type CatapultChoice: Clone + Copy;
     type StartingPointSelector;
+    type FixedSetType: FixedSet;
 
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool;
 }
@@ -21,9 +25,9 @@ pub enum FlatCatapultChoice {
 }
 
 impl GraphSearchAlgorithm for FlatSearch {
-    type LevelContext = (); // flat search has no concept of a graph level
     type CatapultChoice = FlatCatapultChoice;
     type StartingPointSelector = EngineStarter;
+    type FixedSetType = FlatFixedSet;
 
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
         strategy == FlatCatapultChoice::CatapultsEnabled
@@ -38,11 +42,11 @@ pub struct HNSWSearch {}
 
 pub struct HNSWEngineStarter {
     hasher: EngineStarter,
-    pub max_level: u32,
+    pub max_level: usize,
 }
 
 impl HNSWEngineStarter {
-    pub fn new(hasher: EngineStarter, max_level: u32) -> Self {
+    pub fn new(hasher: EngineStarter, max_level: usize) -> Self {
         HNSWEngineStarter { hasher, max_level }
     }
 
@@ -60,9 +64,9 @@ pub enum HNSWCatapultChoice {
 }
 
 impl GraphSearchAlgorithm for HNSWSearch {
-    type LevelContext = u32;
     type CatapultChoice = HNSWCatapultChoice;
     type StartingPointSelector = HNSWEngineStarter;
+    type FixedSetType = HierarchicalFixedSet;
 
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
         strategy == HNSWCatapultChoice::SameLevelCatapults

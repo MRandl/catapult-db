@@ -1,18 +1,18 @@
 use std::{fmt::Debug, sync::RwLock};
 
 use crate::{
-    numerics::AlignedBlock, search::graph_hierarchy::GraphSearchAlgorithm,
-    sets::catapults::CatapultEvictingStructure, sets::catapults::FixedSet,
+    numerics::AlignedBlock,
+    sets::{catapults::CatapultEvictingStructure, fixed::FixedSet},
 };
 
-pub struct Node<CatapultNeighbors, GraphSearchType> {
-    pub neighbors: FixedSet<GraphSearchType>,
+pub struct Node<CatapultNeighbors, FixedSetType: FixedSet + Debug> {
+    pub neighbors: FixedSetType,
     pub catapults: RwLock<CatapultNeighbors>,
     pub payload: Box<[AlignedBlock]>,
 }
 
-impl<T: CatapultEvictingStructure + Debug, GraphSearchType: GraphSearchAlgorithm> Debug
-    for Node<T, GraphSearchType>
+impl<T: CatapultEvictingStructure + Debug, FixedSetType: FixedSet + Debug> Debug
+    for Node<T, FixedSetType>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Node")
@@ -27,14 +27,14 @@ impl<T: CatapultEvictingStructure + Debug, GraphSearchType: GraphSearchAlgorithm
 mod tests {
     use super::*;
     use crate::numerics::SIMD_LANECOUNT;
-    use crate::search::graph_hierarchy::FlatSearch;
     use crate::sets::catapults::UnboundedNeighborSet;
+    use crate::sets::fixed::FlatFixedSet;
 
     #[test]
     fn test_node_debug_format_basic() {
         let node = Node {
             payload: vec![AlignedBlock::new([1.5; SIMD_LANECOUNT])].into_boxed_slice(),
-            neighbors: FixedSet::<FlatSearch>::new(vec![1, 2, 3]),
+            neighbors: FlatFixedSet::new(vec![1, 2, 3]),
             catapults: RwLock::new(UnboundedNeighborSet::new()),
         };
 
@@ -55,7 +55,7 @@ mod tests {
 
         let node = Node {
             payload: vec![AlignedBlock::new([2.0; SIMD_LANECOUNT])].into_boxed_slice(),
-            neighbors: FixedSet::<FlatSearch>::new(vec![5]),
+            neighbors: FlatFixedSet::new(vec![5]),
             catapults: RwLock::new(catapults),
         };
 
@@ -72,7 +72,7 @@ mod tests {
     fn test_node_debug_format_empty_neighbors() {
         let node = Node {
             payload: vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])].into_boxed_slice(),
-            neighbors: FixedSet::<FlatSearch>::new(vec![]),
+            neighbors: FlatFixedSet::new(vec![]),
             catapults: RwLock::new(UnboundedNeighborSet::new()),
         };
 
@@ -94,7 +94,7 @@ mod tests {
                 AlignedBlock::new([3.0; SIMD_LANECOUNT]),
             ]
             .into_boxed_slice(),
-            neighbors: FixedSet::<FlatSearch>::new(vec![1, 2, 3, 4, 5]),
+            neighbors: FlatFixedSet::new(vec![1, 2, 3, 4, 5]),
             catapults: RwLock::new(UnboundedNeighborSet::new()),
         };
 

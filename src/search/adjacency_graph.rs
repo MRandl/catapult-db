@@ -8,6 +8,7 @@ use crate::{
     sets::{
         candidates::{CandidateEntry, SmallestKCandidates},
         catapults::CatapultEvictingStructure,
+        fixed::FixedSet,
         visited::{CompressedBitset, VisitorSet},
     },
 };
@@ -28,7 +29,7 @@ where
     EvictPolicy: CatapultEvictingStructure,
     Algo: GraphSearchAlgorithm,
 {
-    adjacency: Vec<Node<EvictPolicy, Algo>>,
+    adjacency: Vec<Node<EvictPolicy, Algo::FixedSetType>>,
     starter: Algo::StartingPointSelector,
     catapults: Algo::CatapultChoice,
 }
@@ -39,7 +40,7 @@ where
     SearchAlgo: GraphSearchAlgorithm,
 {
     pub fn new(
-        adj: Vec<Node<EvictPolicy, SearchAlgo>>,
+        adj: Vec<Node<EvictPolicy, SearchAlgo::FixedSetType>>,
         engine: SearchAlgo::StartingPointSelector,
         catapults: SearchAlgo::CatapultChoice,
     ) -> Self {
@@ -99,7 +100,7 @@ where
         starting_indices: &[usize],
         k: usize,
         beam_width: usize,
-        level: SearchAlgo::LevelContext,
+        level: <SearchAlgo::FixedSetType as FixedSet>::LevelContext,
     ) -> Vec<usize> {
         assert!(beam_width >= k);
 
@@ -127,7 +128,7 @@ where
             // All of these guys become candidates for expansion. if we have too many candidates
             // (beam width parameter), the `candidates` data structure takes care of removing the
             // worst ones (and the duplicates).
-            let regular_neighbors = &best_candidate_node.neighbors.to_box(level);
+            let regular_neighbors = &best_candidate_node.neighbors.to_level(level);
             candidates.insert_batch(&self.distances_from_indices(regular_neighbors, query));
 
             if SearchAlgo::local_catapults_enabled(self.catapults) {
@@ -190,7 +191,7 @@ where
             catapulted_zero_neighbors
         } else {
             let mut curr_points = starting_points.clone();
-            for curr_level in (0..=self.starter.max_level).rev() {
+            for curr_level in (0_usize..=self.starter.max_level).rev() {
                 // note: curr_points maintains a size of k (<= beam_width) even though two consecutive
                 // beam search calls work with beam_width elements, which may be suboptimal.
                 // todo check the original HNSW paper for how they tackle this. I'm probably paranoid.
@@ -226,7 +227,7 @@ where
         for starting_point in curr_points.iter() {
             let starting_neighs = self.adjacency[*starting_point]
                 .neighbors
-                .to_box(self.starter.max_level);
+                .to_level(self.starter.max_level);
             all_neighbors.extend_from_slice(&starting_neighs);
         }
         all_neighbors.sort_unstable();
@@ -280,7 +281,10 @@ mod tests {
             },
             hash_start::EngineStarter,
         },
-        sets::catapults::{FixedSet, UnboundedNeighborSet},
+        sets::{
+            catapults::UnboundedNeighborSet,
+            fixed::{FlatFixedSet, HierarchicalFixedSet},
+        },
     };
 
     use super::*;
@@ -295,31 +299,31 @@ mod tests {
             // 0: Pos 0.0, Neighbors: [1]
             Node {
                 payload: vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1]),
+                neighbors: FlatFixedSet::new(vec![1]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 10.0, Neighbors: [2]
             Node {
                 payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![2]),
+                neighbors: FlatFixedSet::new(vec![2]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 2: Pos 20.0, Neighbors: [1, 3]
             Node {
                 payload: vec![AlignedBlock::new([20.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1, 3]),
+                neighbors: FlatFixedSet::new(vec![1, 3]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 3: Pos 30.0, Neighbors: [4]
             Node {
                 payload: vec![AlignedBlock::new([30.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![4]),
+                neighbors: FlatFixedSet::new(vec![4]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 4: Pos 40.0, Neighbors: [1]
             Node {
                 payload: vec![AlignedBlock::new([40.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1]),
+                neighbors: FlatFixedSet::new(vec![1]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
@@ -354,7 +358,7 @@ mod tests {
                 .adjacency
                 .iter()
                 .map(|n| {
-                    n.catapults.read().unwrap().to_vec().len() + n.neighbors.to_box(()).len()
+                    n.catapults.read().unwrap().to_vec().len() + n.neighbors.to_level(()).len()
                 })
                 .sum::<usize>(),
             7
@@ -363,7 +367,7 @@ mod tests {
             graph
                 .adjacency
                 .iter()
-                .map(|n| { n.neighbors.to_box(()).len() })
+                .map(|n| { n.neighbors.to_level(()).len() })
                 .sum::<usize>(),
             6
         );
@@ -375,24 +379,24 @@ mod tests {
             // 0: Pos 100.0, Dist 10000
             Node {
                 payload: vec![AlignedBlock::new([100.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::<FlatSearch>::new(vec![2]),
+                neighbors: FlatFixedSet::new(vec![2]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 0.0, Dist 1. (BEST of all)
             Node {
                 payload: vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![0]),
+                neighbors: FlatFixedSet::new(vec![0]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 2: Pos 5.0, Dist 36. (Worst starting point)
             Node {
                 payload: vec![AlignedBlock::new([5.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1]),
+                neighbors: FlatFixedSet::new(vec![1]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
         // Start points: 0, 2
-        let graph = AdjacencyGraph::new(
+        let graph = AdjacencyGraph::<_, FlatSearch>::new(
             nodes,
             EngineStarter::new(4, SIMD_LANECOUNT, 3, Some(42)),
             FlatCatapultChoice::CatapultsEnabled,
@@ -411,45 +415,45 @@ mod tests {
     #[test]
     fn test_complex_search_divergence() {
         // Query target: [0.0]
-        let nodes: Vec<Node<UnboundedNeighborSet, FlatSearch>> = vec![
+        let nodes: Vec<Node<UnboundedNeighborSet, FlatFixedSet>> = vec![
             // 0: Pos 10.0, Dist 100. N: [1, 5]. (Start point)
             Node {
                 payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1, 5]),
+                neighbors: FlatFixedSet::new(vec![1, 5]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 8.0, Dist 64. N: [2].
             Node {
                 payload: vec![AlignedBlock::new([8.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![2]),
+                neighbors: FlatFixedSet::new(vec![2]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 2: Pos 5.0, Dist 25. N: [3].
             Node {
                 payload: vec![AlignedBlock::new([5.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![3]),
+                neighbors: FlatFixedSet::new(vec![3]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 3: Pos 2.0, Dist 4. N: [4].
             Node {
                 payload: vec![AlignedBlock::new([2.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![4]),
+                neighbors: FlatFixedSet::new(vec![4]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 4: Pos 1.0, Dist 1. N: []. (The globally BEST node)
             Node {
                 payload: vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![]),
+                neighbors: FlatFixedSet::new(vec![]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 5: Pos 100.0, Dist 10000. N: []. (A distant dead end)
             Node {
                 payload: vec![AlignedBlock::new([100.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![]),
+                neighbors: FlatFixedSet::new(vec![]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
-        let graph = AdjacencyGraph::new(
+        let graph = AdjacencyGraph::<_, FlatSearch>::new(
             nodes,
             EngineStarter::new(4, SIMD_LANECOUNT, 5, Some(42)),
             FlatCatapultChoice::CatapultsEnabled,
@@ -475,46 +479,44 @@ mod tests {
     }
 
     // HNSW Tests
-    // Note: Currently FixedSet returns the same neighbors for all levels,
-    // so these tests have the same graph topology as FlatSearch tests
 
     fn setup_hnsw_graph() -> AdjacencyGraph<UnboundedNeighborSet, HNSWSearch> {
         let nodes = vec![
             // 0: Pos 0.0, Neighbors: [1]
             Node {
                 payload: vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![1]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 10.0, Neighbors: [2]
             Node {
                 payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![2]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![2]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 2: Pos 20.0, Neighbors: [1, 3]
             Node {
                 payload: vec![AlignedBlock::new([20.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1, 3]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![1, 3]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 3: Pos 30.0, Neighbors: [4]
             Node {
                 payload: vec![AlignedBlock::new([30.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![4]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![4]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 4: Pos 40.0, Neighbors: [1]
             Node {
                 payload: vec![AlignedBlock::new([40.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![1]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
 
         AdjacencyGraph::new(
             nodes,
-            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 5, Some(42)), 2),
+            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 5, Some(42)), 0),
             HNSWCatapultChoice::CatapultsDisabled,
         )
     }
@@ -542,26 +544,26 @@ mod tests {
             // 0: Pos 100.0, Neighbors: [2]
             Node {
                 payload: vec![AlignedBlock::new([100.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::<HNSWSearch>::new(vec![2]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![2]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 0.0, Neighbors: [0] (BEST overall)
             Node {
                 payload: vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![0]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![0]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 2: Pos 5.0, Neighbors: [1]
             Node {
                 payload: vec![AlignedBlock::new([5.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![1]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
 
-        let graph = AdjacencyGraph::new(
+        let graph = AdjacencyGraph::<_, HNSWSearch>::new(
             nodes,
-            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 3, Some(42)), 1),
+            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 3, Some(42)), 0),
             HNSWCatapultChoice::CatapultsDisabled,
         );
 
@@ -580,48 +582,48 @@ mod tests {
     #[test]
     fn test_hnsw_complex_search_divergence() {
         // HNSW graph with a distant dead end
-        let nodes: Vec<Node<UnboundedNeighborSet, HNSWSearch>> = vec![
+        let nodes: Vec<Node<UnboundedNeighborSet, HierarchicalFixedSet>> = vec![
             // 0: Pos 10.0, Neighbors: [1, 5]
             Node {
                 payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1, 5]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![1, 5]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 8.0, Neighbors: [2]
             Node {
                 payload: vec![AlignedBlock::new([8.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![2]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![2]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 2: Pos 5.0, Neighbors: [3]
             Node {
                 payload: vec![AlignedBlock::new([5.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![3]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![3]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 3: Pos 2.0, Neighbors: [4]
             Node {
                 payload: vec![AlignedBlock::new([2.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![4]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![4]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 4: Pos 1.0, Neighbors: [] (globally BEST)
             Node {
                 payload: vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 5: Pos 100.0, Neighbors: [] (distant dead end)
             Node {
                 payload: vec![AlignedBlock::new([100.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
 
-        let graph = AdjacencyGraph::new(
+        let graph = AdjacencyGraph::<_, HNSWSearch>::new(
             nodes,
-            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 6, Some(42)), 2),
+            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 6, Some(42)), 0),
             HNSWCatapultChoice::SameLevelCatapults,
         );
 
@@ -639,48 +641,48 @@ mod tests {
     #[test]
     fn test_hnsw_finalizing_catapuls() {
         // HNSW graph with a distant dead end
-        let nodes: Vec<Node<UnboundedNeighborSet, HNSWSearch>> = vec![
+        let nodes: Vec<Node<UnboundedNeighborSet, HierarchicalFixedSet>> = vec![
             // 0: Pos 10.0, Neighbors: [1, 5]
             Node {
                 payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![1, 5]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![1, 5]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 1: Pos 8.0, Neighbors: [2]
             Node {
                 payload: vec![AlignedBlock::new([8.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![2]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![2]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 2: Pos 5.0, Neighbors: [3]
             Node {
                 payload: vec![AlignedBlock::new([5.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![3]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![3]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 3: Pos 2.0, Neighbors: [4]
             Node {
                 payload: vec![AlignedBlock::new([2.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![4]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![4]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 4: Pos 1.0, Neighbors: [5] (globally BEST)
             Node {
                 payload: vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![5]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![5]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
             // 5: Pos 100.0, Neighbors: [0]
             Node {
                 payload: vec![AlignedBlock::new([100.0; SIMD_LANECOUNT])].into_boxed_slice(),
-                neighbors: FixedSet::new(vec![0]),
+                neighbors: HierarchicalFixedSet::new(vec![vec![0]]),
                 catapults: RwLock::new(UnboundedNeighborSet::new()),
             },
         ];
 
-        let graph = AdjacencyGraph::new(
+        let graph = AdjacencyGraph::<_, HNSWSearch>::new(
             nodes,
-            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 6, Some(42)), 2),
+            HNSWEngineStarter::new(EngineStarter::new(4, SIMD_LANECOUNT, 6, Some(42)), 0),
             HNSWCatapultChoice::FinalizingCatapults,
         );
 
