@@ -41,17 +41,10 @@ impl VectorLike for [AlignedBlock] {
     #[inline]
     fn l2_squared(&self, othr: &[AlignedBlock]) -> f32 {
         assert_eq!(self.len(), othr.len());
-        //assert!(self.len().is_multiple_of(SIMD_LANECOUNT));
 
         let mut intermediate_sum_lanes = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
 
-        let self_chunks = self.iter();
-        let othr_chunks = othr.iter();
-
-        for (&slice_self, &slice_othr) in self_chunks.zip(othr_chunks) {
-            // prefetch intrinsics didn't prove to be crazy useful here.
-            // i'll just remove them for now. Maybe when the final DB is built,
-            // we can benchmark this again.
+        for (&slice_self, &slice_othr) in self.iter().zip(othr.iter()) {
             let f32simd_slf = SimdF32::from_array(slice_self.data);
             let f32simd_oth = SimdF32::from_array(slice_othr.data);
             let diff = f32simd_slf - f32simd_oth;
@@ -79,10 +72,7 @@ impl VectorLike for [AlignedBlock] {
 
         let mut intermediate_sum_lanes = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
 
-        let self_chunks = self.iter();
-        let othr_chunks = othr.iter();
-
-        for (&slice_self, &slice_othr) in self_chunks.zip(othr_chunks) {
+        for (&slice_self, &slice_othr) in self.iter().zip(othr.iter()) {
             let f32simd_slf = SimdF32::from_array(slice_self.data);
             let f32simd_oth = SimdF32::from_array(slice_othr.data);
             intermediate_sum_lanes += f32simd_slf * f32simd_oth;
