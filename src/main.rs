@@ -3,9 +3,16 @@ use catapult::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
     search::{AdjacencyGraph, FlatCatapultChoice, FlatSearch, hash_start::EngineStarter},
     sets::catapults::FifoSet,
+    statistics::Stats,
 };
 use clap::Parser;
-use std::{hint::black_box, path::PathBuf, str::FromStr, sync::Arc, thread};
+use std::{
+    hint::black_box,
+    path::PathBuf,
+    str::FromStr,
+    sync::{Arc, atomic::AtomicUsize},
+    thread,
+};
 
 /// Vector search engine using adjacency graphs
 #[derive(Parser, Debug)]
@@ -61,7 +68,7 @@ fn main() {
         .collect();
 
     let graph_size = adjacency.len();
-    let num_hash = 10;
+    let num_hash = 16;
     let plane_dim = queries[0].len() * SIMD_LANECOUNT;
     let engine_seed = Some(42);
     let engine = EngineStarter::new(num_hash, plane_dim, graph_size, engine_seed);
@@ -82,65 +89,95 @@ fn main() {
     println!("Starting search of {num_queries} vectors using {num_threads} thread(s)...");
     let start_time = std::time::Instant::now();
 
-    let reses = if num_threads == 1 {
-        // Single-threaded execution
-        let mut reses = Vec::with_capacity(num_queries);
+    let queries = Arc::new(queries);
+    let batch_size = 4096;
+    let next_batch = Arc::new(AtomicUsize::new(0));
+    let handles: Vec<_> = (0..num_threads)
+        .map(|_thread_id| {
+            let graph = Arc::clone(&full_graph);
+            let queries_clone = Arc::clone(&queries);
+            let next_batch_clone = Arc::clone(&next_batch);
 
-        for (i, query) in queries.iter().enumerate() {
-            let _result =
-                black_box(full_graph.beam_search(query, args.num_neighbors, args.beam_width));
-            reses.push(_result[0]);
+            thread::spawn(move || {
+                let mut local_results = Vec::new();
+                let mut local_stats = Stats::new();
 
-            // Print progress every 100k queries
-            if (i + 1) % 100_000 == 0 {
-                let elapsed = start_time.elapsed();
-                let qps = (i + 1) as f64 / elapsed.as_secs_f64();
-                println!(
-                    "Processed {}/{} queries ({:.2} QPS)",
-                    i + 1,
-                    num_queries,
-                    qps
-                );
-            }
-        }
+                loop {
+                    // Atomically grab the next batch of work
+                    let batch_start = next_batch_clone
+                        .fetch_add(batch_size, std::sync::atomic::Ordering::Relaxed);
 
-        reses
-    } else {
-        // Multi-threaded execution
-        let queries = Arc::new(queries);
-        let chunk_size = num_queries.div_ceil(num_threads);
+                    if batch_start >= num_queries {
+                        break;
+                    }
 
-        let handles: Vec<_> = (0..num_threads)
-            .map(|thread_id| {
-                let graph = Arc::clone(&full_graph);
-                let queries_clone = Arc::clone(&queries);
-                let start = thread_id * chunk_size;
-                let end = std::cmp::min(start + chunk_size, num_queries);
+                    let batch_end = std::cmp::min(batch_start + batch_size, num_queries);
 
-                thread::spawn(move || {
-                    let mut local_results = Vec::with_capacity(end - start);
-                    for query in &queries_clone[start..end] {
+                    // Process this batch
+                    for query in &queries_clone[batch_start..batch_end] {
                         let _result = black_box(graph.beam_search(
                             query,
                             args.num_neighbors,
                             args.beam_width,
+                            &mut local_stats,
                         ));
                         local_results.push(_result[0]);
                     }
-                    local_results
-                })
+                }
+
+                (local_results, local_stats)
             })
-            .collect();
+        })
+        .collect();
 
-        // Collect results from all threads
-        let mut reses = Vec::with_capacity(num_queries);
-        for handle in handles {
-            let local_results = handle.join().expect("Thread panicked");
-            reses.extend(local_results);
+    let mut reses = Vec::with_capacity(num_queries);
+    let mut combined_stats = Stats::new();
+    for handle in handles {
+        let (local_results, local_stats) = handle.join().expect("Thread panicked");
+        reses.extend(local_results);
+
+        // Merge stats from this thread
+        for _ in 0..local_stats.get_searches_with_catapults() {
+            combined_stats.bump_searches_with_catapults();
         }
+        combined_stats.bump_catapults_used(local_stats.get_catapults_used());
+        combined_stats.bump_regular_neighbors_added(local_stats.get_regular_neighbors_added());
+        for _ in 0..local_stats.get_nodes_expanded() {
+            combined_stats.bump_nodes_expanded();
+        }
+    }
 
-        reses
-    };
+    if args.catapults {
+        let catapult_usage_pct = if num_queries > 0 {
+            (combined_stats.get_searches_with_catapults() as f64 / num_queries as f64) * 100.0
+        } else {
+            0.0
+        };
+        let avg_nodes_expanded = combined_stats.get_nodes_expanded() as f64 / num_queries as f64;
+        let avg_regular_added =
+            combined_stats.get_regular_neighbors_added() as f64 / num_queries as f64;
+        let avg_catapults_added = combined_stats.get_catapults_used() as f64 / num_queries as f64;
+        println!(
+            "Catapult stats: {}/{} searches used catapults ({:.2}%), {} total catapult edges used",
+            combined_stats.get_searches_with_catapults(),
+            num_queries,
+            catapult_usage_pct,
+            combined_stats.get_catapults_used()
+        );
+        println!(
+            "  Avg per search: {:.2} nodes expanded, {:.2} regular neighbors added, {:.2} catapult neighbors added",
+            avg_nodes_expanded, avg_regular_added, avg_catapults_added
+        );
+    } else {
+        let avg_nodes_expanded = combined_stats.get_nodes_expanded() as f64 / num_queries as f64;
+        let avg_regular_added =
+            combined_stats.get_regular_neighbors_added() as f64 / num_queries as f64;
+        println!(
+            "Avg per search: {:.2} nodes expanded, {:.2} regular neighbors added",
+            avg_nodes_expanded, avg_regular_added
+        );
+    }
+    let reses = reses;
 
     println!("{:?}", reses.into_iter().reduce(|a, b| a + b));
 

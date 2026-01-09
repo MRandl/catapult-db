@@ -31,7 +31,11 @@ impl SmallestKCandidates {
         }
     }
 
-    pub fn insert_batch(&mut self, items: &[CandidateEntry]) {
+    /// Inserts a batch of items, maintaining the k smallest unique elements.
+    /// Returns the number of elements that were actually added (not duplicates or rejected).
+    pub fn insert_batch(&mut self, items: &[CandidateEntry]) -> usize {
+        let mut added_count = 0;
+
         for item in items {
             // 1. find the insertion point (O(log K))
             let idx = self.sorted_members.partition_point(|m| m < item);
@@ -45,14 +49,18 @@ impl SmallestKCandidates {
             if self.sorted_members.len() < self.capacity {
                 // Not full yet: maintain sort order by inserting at idx
                 self.sorted_members.insert(idx, item.clone());
+                added_count += 1;
             } else if idx < self.capacity {
                 // Full, but new item is smaller than our current max (last element)
                 // Remove the largest element and insert the new one
                 self.sorted_members.pop();
                 self.sorted_members.insert(idx, item.clone());
+                added_count += 1;
             }
             // If idx == self.capacity, item is >= all current members; ignore it.
         }
+
+        added_count
     }
 
     pub fn iter(&self) -> std::slice::Iter<'_, CandidateEntry> {
