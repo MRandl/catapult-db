@@ -1,1 +1,1 @@
-cargo llvm-cov --no-cfg-coverage --show-missing-lines --no-cfg-coverage-nightly --html
+cargo llvm-cov --show-missing-lines --no-cfg-coverage --no-cfg-coverage-nightly --cobertura --output-path cobertura.xml && pycobertura show cobertura.xml

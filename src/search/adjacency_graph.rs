@@ -758,4 +758,89 @@ mod tests {
         assert_eq!(results1[0], 4);
         assert_eq!(results1, results2);
     }
+
+    #[test]
+    fn test_catapult_usage_coverage() {
+        // This test ensures that used_catapult_this_search is set to true.
+        // We need a scenario where:
+        // 1. First search establishes a catapult from starting node to a distant best node
+        // 2. Second search uses that catapult to skip intermediate nodes
+        //
+        // Graph structure:
+        //    0 (start) --> 1 --> 2 --> 3
+        //                   \         /
+        //                    4 <-----
+        //
+        // Query at pos 35: First search from 0 traverses 0->1->2->3, finds 3 is best (dist 0)
+        // This creates catapult: 0 -> 3
+        // Second search from 0 has catapult 0->3 which gets added to candidates, triggering the flag
+
+        let nodes = vec![
+            // 0: Pos 0.0, Neighbors: [1]
+            Node {
+                payload: vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FlatFixedSet::new(vec![1]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 1: Pos 10.0, Neighbors: [2, 4]
+            Node {
+                payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FlatFixedSet::new(vec![2, 4]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 2: Pos 20.0, Neighbors: [3]
+            Node {
+                payload: vec![AlignedBlock::new([20.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FlatFixedSet::new(vec![3]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 3: Pos 35.0, Neighbors: [4]
+            Node {
+                payload: vec![AlignedBlock::new([35.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FlatFixedSet::new(vec![4]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+            // 4: Pos 50.0, Neighbors: []
+            Node {
+                payload: vec![AlignedBlock::new([50.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FlatFixedSet::new(vec![]),
+                catapults: RwLock::new(UnboundedNeighborSet::new()),
+            },
+        ];
+
+        let graph = AdjacencyGraph::new_flat(
+            nodes,
+            EngineStarter::new(4, SIMD_LANECOUNT, 5, Some(42)),
+            FlatCatapultChoice::CatapultsEnabled,
+        );
+
+        // Manually add a catapult from node 0 to node 3 (simulating a previous search result)
+        graph.adjacency[0].catapults.write().unwrap().insert(3);
+
+        let query = vec![AlignedBlock::new([35.0; SIMD_LANECOUNT])];
+        let k = 2;
+        let beam_width = 3;
+
+        // Use beam_search_raw directly with starting point [0]
+        // When node 0 is expanded, its catapult to node 3 should be used
+        let mut stats = crate::statistics::Stats::new();
+        let starting_points = vec![0];
+
+        let results =
+            graph.beam_search_raw(&query, &starting_points, k, beam_width, (), &mut stats);
+
+        // Should find node 3 as the best result
+        assert_eq!(results[0], 3);
+
+        // Should have used the catapult from node 0 to node 3
+        assert_eq!(
+            stats.get_searches_with_catapults(),
+            1,
+            "Expected catapult to be used during search"
+        );
+        assert!(
+            stats.get_catapults_used() > 0,
+            "Expected at least one catapult edge to be added to candidates"
+        );
+    }
 }
