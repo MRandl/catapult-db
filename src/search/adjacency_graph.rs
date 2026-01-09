@@ -76,6 +76,13 @@ where
     EvictPolicy: CatapultEvictingStructure,
     SearchAlgo: GraphSearchAlgorithm,
 {
+    /// Resets all catapults in the graph by creating new empty catapult structures
+    pub fn reset_catapults(&self) {
+        for node in &self.adjacency {
+            *node.catapults.write().unwrap() = EvictPolicy::new();
+        }
+    }
+
     fn distances_from_indices(
         &self,
         indices: &[usize],
