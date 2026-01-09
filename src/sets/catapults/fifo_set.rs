@@ -27,9 +27,17 @@ impl<const CAPACITY: usize> CatapultEvictingStructure for FifoSet<CAPACITY> {
     }
 
     fn insert(&mut self, key: usize) {
+        // Remove any existing occurrence of the key to maintain set behavior
+        if let Some(pos) = self.queue.iter().position(|&x| x == key) {
+            self.queue.remove(pos);
+        }
+
+        // If at capacity, evict the oldest element
         if self.queue.len() == CAPACITY {
             self.queue.pop_front();
         }
+
+        // Insert the new element at the back
         self.queue.push_back(key);
     }
 
@@ -151,16 +159,18 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_values_are_inserted_without_deduplication() {
+    fn duplicate_values_are_deduplicated_keeping_last() {
         let mut fifo = FifoSet::<5>::new();
 
         fifo.insert(1);
-        fifo.insert(1);
-        fifo.insert(1);
+        fifo.insert(2);
+        fifo.insert(3);
+        fifo.insert(1); // Should remove old 1 and add at end
 
+        // Should have [2, 3, 1] - only one occurrence of 1 at the end
         assert_eq!(fifo.queue.len(), 3);
-        assert_eq!(fifo.queue[0], 1);
-        assert_eq!(fifo.queue[1], 1);
+        assert_eq!(fifo.queue[0], 2);
+        assert_eq!(fifo.queue[1], 3);
         assert_eq!(fifo.queue[2], 1);
     }
 
@@ -228,5 +238,94 @@ mod tests {
         let fifo: FifoSet<5> = FifoSet::default();
         assert_eq!(fifo.queue.len(), 0);
         assert_eq!(fifo.queue.capacity(), 5);
+    }
+
+    #[test]
+    fn duplicate_insertion_maintains_set_property() {
+        let mut fifo = FifoSet::<3>::new();
+
+        fifo.insert(1);
+        fifo.insert(1);
+
+        // Should only have one element
+        assert_eq!(fifo.queue.len(), 1);
+        assert_eq!(fifo.queue[0], 1);
+    }
+
+    #[test]
+    fn duplicate_with_full_capacity_maintains_set_behavior() {
+        let mut fifo = FifoSet::<3>::new();
+
+        fifo.insert(1);
+        fifo.insert(2);
+        fifo.insert(3);
+        // Queue: [1, 2, 3]
+
+        fifo.insert(2); // Should remove 2 from middle, add at end
+        // Queue: [1, 3, 2]
+
+        assert_eq!(fifo.queue.len(), 3);
+        assert_eq!(fifo.queue[0], 1);
+        assert_eq!(fifo.queue[1], 3);
+        assert_eq!(fifo.queue[2], 2);
+    }
+
+    #[test]
+    fn repeated_duplicates_maintain_fifo_order() {
+        let mut fifo = FifoSet::<4>::new();
+
+        fifo.insert(1);
+        fifo.insert(2);
+        fifo.insert(3);
+        fifo.insert(4);
+        // Queue: [1, 2, 3, 4]
+
+        fifo.insert(2); // Remove 2 from position 1, add at end
+        // Queue: [1, 3, 4, 2]
+
+        assert_eq!(fifo.queue.len(), 4);
+        assert_eq!(fifo.queue[0], 1);
+        assert_eq!(fifo.queue[1], 3);
+        assert_eq!(fifo.queue[2], 4);
+        assert_eq!(fifo.queue[3], 2);
+
+        fifo.insert(3); // Remove 3 from position 1, add at end
+        // Queue: [1, 4, 2, 3]
+
+        assert_eq!(fifo.queue.len(), 4);
+        assert_eq!(fifo.queue[0], 1);
+        assert_eq!(fifo.queue[1], 4);
+        assert_eq!(fifo.queue[2], 2);
+        assert_eq!(fifo.queue[3], 3);
+
+        fifo.insert(5); // New element, evict 1
+        // Queue: [4, 2, 3, 5]
+
+        assert_eq!(fifo.queue.len(), 4);
+        assert_eq!(fifo.queue[0], 4);
+        assert_eq!(fifo.queue[1], 2);
+        assert_eq!(fifo.queue[2], 3);
+        assert_eq!(fifo.queue[3], 5);
+    }
+
+    #[test]
+    fn set_behavior_no_duplicates_in_final_state() {
+        let mut fifo = FifoSet::<5>::new();
+
+        fifo.insert(10);
+        fifo.insert(20);
+        fifo.insert(10);
+        fifo.insert(30);
+        fifo.insert(20);
+
+        // Should have [10, 30, 20] - no duplicates
+        assert_eq!(fifo.queue.len(), 3);
+
+        // Verify no duplicates
+        let vec = fifo.to_vec();
+        let mut sorted = vec.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(vec.len(), sorted.len(), "Should have no duplicates");
     }
 }
