@@ -202,10 +202,11 @@ where
         let search_results = self.beam_search_raw(query, &distances, k, beam_width, (), stats);
         let best_result = search_results[0].index;
 
-        self.starter.new_catapult(signature, best_result);
-
-        if search_results.iter().any(|e| e.has_catapult_ancestor) {
-            stats.bump_searches_with_catapults();
+        if FlatSearch::local_catapults_enabled(self._catapults) {
+            self.starter.new_catapult(signature, best_result);
+            if search_results.iter().any(|e| e.has_catapult_ancestor) {
+                stats.bump_searches_with_catapults();
+            }
         }
         search_results
     }
@@ -309,10 +310,7 @@ mod tests {
             graph_hierarchy::{FlatCatapultChoice, FlatSearch},
             hash_start::EngineStarter,
         },
-        sets::{
-            catapults::{FifoSet, UnboundedNeighborSet},
-            fixed::FlatFixedSet,
-        },
+        sets::{catapults::FifoSet, fixed::FlatFixedSet},
     };
 
     pub type TestEngineStarter = EngineStarter<FifoSet<30>>;
@@ -323,7 +321,7 @@ mod tests {
     // Nodes: 0 (pos 0), 1 (pos 10), 2 (pos 20), 3 (pos 30), 4 (pos 40)
     // Edges: 0 -> 1 -> 2 -> 3 -> 4
     // Query: 11.0
-    fn setup_simple_graph() -> AdjacencyGraph<UnboundedNeighborSet, FlatSearch> {
+    fn setup_simple_graph() -> AdjacencyGraph<FifoSet<30>, FlatSearch> {
         let nodes = vec![
             // 0: Pos 0.0, Neighbors: [1]
             Node {
@@ -354,7 +352,7 @@ mod tests {
         // Start from node 0
         AdjacencyGraph::new_flat(
             nodes,
-            EngineStarter::new(4, SIMD_LANECOUNT, 4, 42),
+            EngineStarter::new(4, SIMD_LANECOUNT, 0, 42, true),
             FlatCatapultChoice::CatapultsEnabled,
         )
     }
@@ -416,7 +414,7 @@ mod tests {
         // Start points: 0, 2
         let graph = AdjacencyGraph::new_flat(
             nodes,
-            TestEngineStarter::new(4, SIMD_LANECOUNT, 0, 42),
+            TestEngineStarter::new(4, SIMD_LANECOUNT, 0, 42, true),
             FlatCatapultChoice::CatapultsEnabled,
         );
         let query = vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])];
@@ -468,7 +466,7 @@ mod tests {
         ];
         let graph = AdjacencyGraph::new_flat(
             nodes,
-            TestEngineStarter::new(4, SIMD_LANECOUNT, 1, 42),
+            TestEngineStarter::new(4, SIMD_LANECOUNT, 1, 42, true),
             FlatCatapultChoice::CatapultsEnabled,
         );
         let query = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])];

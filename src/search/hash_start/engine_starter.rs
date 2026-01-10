@@ -7,6 +7,7 @@ pub struct EngineStarter<T: CatapultEvictingStructure> {
     hasher: SimilarityHasher,
     starting_node: usize,
     catapults: Box<[RwLock<T>]>,
+    enabled_catapults: bool,
 }
 
 pub struct StartingPoints {
@@ -18,7 +19,13 @@ impl<T> EngineStarter<T>
 where
     T: CatapultEvictingStructure,
 {
-    pub fn new(num_hash: usize, plane_dim: usize, starting_node: usize, seed: u64) -> Self {
+    pub fn new(
+        num_hash: usize,
+        plane_dim: usize,
+        starting_node: usize,
+        seed: u64,
+        enabled_catapults: bool,
+    ) -> Self {
         let hasher = SimilarityHasher::new_seeded(num_hash, plane_dim, seed);
 
         let amount_of_catapult_sets = 1 << num_hash;
@@ -31,13 +38,19 @@ where
             hasher,
             starting_node,
             catapults: catapult_vecs.into_boxed_slice(),
+            enabled_catapults,
         }
     }
 
     pub fn select_starting_points(&self, query: &[AlignedBlock]) -> StartingPoints {
         let signature = self.hasher.hash_int(query);
-        let mut catapults = self.catapults[signature].read().unwrap().to_vec();
-        catapults.push(self.starting_node);
+        let catapults = if self.enabled_catapults {
+            let mut catapults = self.catapults[signature].read().unwrap().to_vec();
+            catapults.push(self.starting_node);
+            catapults
+        } else {
+            Vec::with_capacity(1)
+        };
         StartingPoints {
             signature,
             start_points: catapults,
@@ -62,33 +75,32 @@ mod tests {
 
     #[test]
     fn test_new_with_seed() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         assert_eq!(starter.starting_node, 1000);
         assert_eq!(starter.catapults.len(), 1 << 8); // 2^8 = 256
     }
 
     #[test]
     fn test_new_creates_correct_catapult_count() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 500, 123);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 500, 123, true);
         assert_eq!(starter.starting_node, 500);
         assert_eq!(starter.catapults.len(), 1 << 8); // 2^8 = 256
     }
 
     #[test]
     fn test_select_starting_points_includes_starting_node() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         let query = create_test_query(1.0);
 
         let result = starter.select_starting_points(&query);
 
         // Should always include the starting_node
         assert!(result.start_points.contains(&1000));
-        assert!(!result.start_points.is_empty());
     }
 
     #[test]
     fn test_insert_and_retrieve_catapult() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         let query = create_test_query(1.0);
 
         let result = starter.select_starting_points(&query);
@@ -105,7 +117,7 @@ mod tests {
 
     #[test]
     fn test_catapult_persists_across_queries() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         let query = create_test_query(1.0);
 
         let result = starter.select_starting_points(&query);
@@ -120,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_same_query_returns_consistent_signature() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         let query = create_test_query(1.0);
 
         let result1 = starter.select_starting_points(&query);
@@ -133,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_different_queries_different_signatures() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         let query1 = create_test_query(1.0);
         let query2 = create_test_query(-1.0);
 
@@ -146,8 +158,8 @@ mod tests {
     }
     #[test]
     fn test_determinism_with_seed() {
-        let starter1 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
-        let starter2 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter1 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
+        let starter2 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         let query = create_test_query(1.5);
 
         let result1 = starter1.select_starting_points(&query);
@@ -159,8 +171,8 @@ mod tests {
 
     #[test]
     fn test_different_seeds_different_signatures() {
-        let starter1 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
-        let starter2 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 99);
+        let starter1 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
+        let starter2 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 99, true);
         let query = create_test_query(1.0);
 
         let result1 = starter1.select_starting_points(&query);
@@ -172,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_multiple_catapults_same_signature() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         let query = create_test_query(1.0);
 
         let result = starter.select_starting_points(&query);
@@ -194,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_different_signatures_independent_catapults() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         let query1 = create_test_query(1.0);
         let query2 = create_test_query(-1.0);
 
@@ -219,7 +231,7 @@ mod tests {
     #[test]
     fn test_signature_within_bounds() {
         let num_hash = 8;
-        let starter = TestEngineStarter::new(num_hash, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(num_hash, SIMD_LANECOUNT, 1000, 42, true);
 
         for i in 0..10 {
             let query = create_test_query(i as f32);
@@ -232,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_multidimensional_query() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT * 4, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT * 4, 1000, 42, true);
         let query = vec![
             AlignedBlock::new([1.0; SIMD_LANECOUNT]),
             AlignedBlock::new([2.0; SIMD_LANECOUNT]),
@@ -249,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_consistency_across_multiple_calls() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         let query = create_test_query(3.0);
 
         let result1 = starter.select_starting_points(&query);
@@ -264,7 +276,7 @@ mod tests {
 
     #[test]
     fn test_fifo_eviction_behavior() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42, true);
         let query = create_test_query(1.0);
 
         let result = starter.select_starting_points(&query);
@@ -300,7 +312,7 @@ mod tests {
 
     #[test]
     fn test_empty_catapult_only_returns_starting_node() {
-        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 999, 42);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 999, 42, true);
         let query = create_test_query(5.5);
 
         let result = starter.select_starting_points(&query);

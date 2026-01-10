@@ -71,7 +71,13 @@ fn main() {
     let num_hash = 16;
     let plane_dim = queries[0].len() * SIMD_LANECOUNT;
     let engine_seed = 42;
-    let engine = EngineStarter::<FifoSet<30>>::new(num_hash, plane_dim, graph_size, engine_seed);
+    let engine = EngineStarter::<FifoSet<30>>::new(
+        num_hash,
+        plane_dim,
+        graph_size,
+        engine_seed,
+        args.catapults,
+    );
 
     let full_graph = Arc::new(AdjacencyGraph::new_flat(
         adjacency,
