@@ -72,7 +72,7 @@ mod tests {
 
     #[test]
     fn test_stats_initialized_to_zero() {
-        let stats = Stats::new();
+        let stats = Stats::default();
         assert_eq!(stats.get_beam_calls(), 0);
         assert_eq!(stats.get_computed_dists(), 0);
         assert_eq!(stats.get_nodes_visited(), 0);
@@ -140,5 +140,31 @@ mod tests {
 
         stats.bump_searches_with_catapults();
         assert_eq!(stats.get_searches_with_catapults(), 3);
+    }
+
+    #[test]
+    fn test_merge() {
+        let mut stats1 = Stats::new();
+        stats1.bump_beam_calls();
+        stats1.bump_beam_calls();
+        stats1.bump_nodes_visited();
+        stats1.bump_computed_dists(10);
+        stats1.bump_searches_with_catapults();
+
+        let mut stats2 = Stats::new();
+        stats2.bump_beam_calls();
+        stats2.bump_nodes_visited();
+        stats2.bump_nodes_visited();
+        stats2.bump_nodes_visited();
+        stats2.bump_computed_dists(25);
+        stats2.bump_searches_with_catapults();
+        stats2.bump_searches_with_catapults();
+
+        let merged = stats1.merge(&stats2);
+
+        assert_eq!(merged.get_beam_calls(), 3);
+        assert_eq!(merged.get_nodes_visited(), 4);
+        assert_eq!(merged.get_computed_dists(), 35);
+        assert_eq!(merged.get_searches_with_catapults(), 3);
     }
 }

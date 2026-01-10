@@ -196,7 +196,8 @@ where
         let entry_points = hash_search.start_points;
 
         let mut distances = self.distances_from_indices(&entry_points, query, true);
-        distances[0].has_catapult_ancestor = false;
+        let last_index = distances.len() - 1;
+        distances[last_index].has_catapult_ancestor = false;
 
         let search_results = self.beam_search_raw(query, &distances, k, beam_width, (), stats);
         let best_result = search_results[0].index;
@@ -368,13 +369,21 @@ mod tests {
         // Distances: 0(121), 1(1), 2(81), 3(361), 4(841)
         let mut stats = crate::statistics::Stats::new();
 
-        let results = graph.beam_search(&query, k, beam_width, &mut stats);
+        let results1 = graph.beam_search(&query, k, beam_width, &mut stats);
+        let results2 = graph.beam_search(&query, k, beam_width, &mut stats);
+
+        assert_eq!(stats.get_searches_with_catapults(), 1);
+
+        assert_eq!(
+            results1.iter().map(|e| e.index).collect::<Vec<_>>(),
+            results2.iter().map(|e| e.index).collect::<Vec<_>>()
+        );
 
         // Final candidates (in order of distance): 1 (1), 2 (81), 0 (121)
         // Top K=2 results: [1, 2]
-        assert_eq!(results.len(), k);
-        assert_eq!(results[0].index, 1);
-        assert_eq!(results[1].index, 2);
+        assert_eq!(results1.len(), k);
+        assert_eq!(results1[0].index, 1);
+        assert_eq!(results1[1].index, 2);
 
         // Verify the graph structure - count total edges
         let total_edges: usize = graph

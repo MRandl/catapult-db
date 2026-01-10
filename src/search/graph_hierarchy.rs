@@ -11,7 +11,7 @@ pub trait GraphSearchAlgorithm {
     type StartingPointSelector<T: CatapultEvictingStructure>;
     type FixedSetType: FixedSet;
 
-    fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool;
+    //fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool;
 }
 
 // search mode 1: Flat search, where one search is performed on a big graph.
@@ -31,9 +31,9 @@ impl GraphSearchAlgorithm for FlatSearch {
     type StartingPointSelector<T: CatapultEvictingStructure> = EngineStarter<T>;
     type FixedSetType = FlatFixedSet;
 
-    fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
-        strategy == FlatCatapultChoice::CatapultsEnabled
-    }
+    // fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
+    //     strategy == FlatCatapultChoice::CatapultsEnabled
+    // }
 }
 
 // Search mode 2: HNSW, which makes use of stacked graphs which get progressively denser
