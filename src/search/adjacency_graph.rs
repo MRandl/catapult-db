@@ -321,7 +321,7 @@ mod tests {
     // Nodes: 0 (pos 0), 1 (pos 10), 2 (pos 20), 3 (pos 30), 4 (pos 40)
     // Edges: 0 -> 1 -> 2 -> 3 -> 4
     // Query: 11.0
-    fn setup_simple_graph() -> AdjacencyGraph<FifoSet<30>, FlatSearch> {
+    fn setup_simple_graph(catapults_enabled: bool) -> AdjacencyGraph<FifoSet<30>, FlatSearch> {
         let nodes = vec![
             // 0: Pos 0.0, Neighbors: [1]
             Node {
@@ -349,17 +349,22 @@ mod tests {
                 neighbors: FlatFixedSet::new(vec![1]),
             },
         ];
+        let catapult_choice = if catapults_enabled {
+            FlatCatapultChoice::CatapultsEnabled
+        } else {
+            FlatCatapultChoice::CatapultsDisabled
+        };
         // Start from node 0
         AdjacencyGraph::new_flat(
             nodes,
-            EngineStarter::new(4, SIMD_LANECOUNT, 0, 42, true),
-            FlatCatapultChoice::CatapultsEnabled,
+            EngineStarter::new(4, SIMD_LANECOUNT, 0, 42, catapults_enabled),
+            catapult_choice,
         )
     }
 
     #[test]
     fn test_basic_search_path() {
-        let graph = setup_simple_graph();
+        let graph = setup_simple_graph(true);
         let query = vec![AlignedBlock::new([11.0; SIMD_LANECOUNT])];
         let k = 2;
         let beam_width = 3;
@@ -390,6 +395,45 @@ mod tests {
             .map(|n| n.neighbors.to_level(()).len())
             .sum();
         assert_eq!(total_edges, 6);
+    }
+
+    #[test]
+    fn test_first_query_same_results_with_and_without_catapults() {
+        // Test that the first query returns identical results regardless of catapult setting
+        // This is expected because catapults only affect subsequent queries after being established
+        let graph_with_catapults = setup_simple_graph(true);
+        let graph_without_catapults = setup_simple_graph(false);
+
+        let query = vec![AlignedBlock::new([11.0; SIMD_LANECOUNT])];
+        let k = 2;
+        let beam_width = 3;
+
+        let mut stats_with = crate::statistics::Stats::new();
+        let mut stats_without = crate::statistics::Stats::new();
+
+        let results_with = graph_with_catapults.beam_search(&query, k, beam_width, &mut stats_with);
+        let results_without =
+            graph_without_catapults.beam_search(&query, k, beam_width, &mut stats_without);
+
+        // Both should return the same indices
+        assert_eq!(
+            results_with.iter().map(|e| e.index).collect::<Vec<_>>(),
+            results_without.iter().map(|e| e.index).collect::<Vec<_>>(),
+            "First query should return same results with and without catapults"
+        );
+
+        // Both should return the same distances
+        assert_eq!(
+            results_with.iter().map(|e| e.distance).collect::<Vec<_>>(),
+            results_without
+                .iter()
+                .map(|e| e.distance)
+                .collect::<Vec<_>>(),
+            "First query should return same distances with and without catapults"
+        );
+
+        // Graph without catapults should never use catapults
+        assert_eq!(stats_without.get_searches_with_catapults(), 0);
     }
 
     #[test]

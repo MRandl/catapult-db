@@ -49,7 +49,7 @@ where
             catapults.push(self.starting_node);
             catapults
         } else {
-            Vec::with_capacity(1)
+            vec![self.starting_node]
         };
         StartingPoints {
             signature,
