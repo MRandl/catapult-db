@@ -48,13 +48,13 @@ impl SmallestKCandidates {
             // 3. size Management
             if self.sorted_members.len() < self.capacity {
                 // Not full yet: maintain sort order by inserting at idx
-                self.sorted_members.insert(idx, item.clone());
+                self.sorted_members.insert(idx, *item);
                 added_count += 1;
             } else if idx < self.capacity {
                 // Full, but new item is smaller than our current max (last element)
                 // Remove the largest element and insert the new one
                 self.sorted_members.pop();
-                self.sorted_members.insert(idx, item.clone());
+                self.sorted_members.insert(idx, *item);
                 added_count += 1;
             }
             // If idx == self.capacity, item is >= all current members; ignore it.

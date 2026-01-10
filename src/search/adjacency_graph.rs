@@ -133,7 +133,7 @@ where
         let mut candidates: SmallestKCandidates = SmallestKCandidates::new(beam_width);
         let mut visited = CompressedBitset::new();
 
-        candidates.insert_batch(&starting_candidates);
+        candidates.insert_batch(starting_candidates);
 
         // among the suggested entry points, one of them is 'the best'. Let's identify it.
         let initial_best_node = candidates.iter().min().copied().expect(

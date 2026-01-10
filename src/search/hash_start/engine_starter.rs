@@ -83,7 +83,7 @@ mod tests {
 
         // Should always include the starting_node
         assert!(result.start_points.contains(&1000));
-        assert!(result.start_points.len() >= 1);
+        assert!(!result.start_points.is_empty());
     }
 
     #[test]
