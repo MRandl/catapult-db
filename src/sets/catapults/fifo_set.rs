@@ -46,6 +46,10 @@ impl<const CAPACITY: usize> CatapultEvictingStructure for FifoSet<CAPACITY> {
             queue: VecDeque::new(),
         }
     }
+
+    fn clear(&mut self) {
+        self.queue.clear();
+    }
 }
 
 impl<const CAPACITY: usize> std::fmt::Debug for FifoSet<CAPACITY> {

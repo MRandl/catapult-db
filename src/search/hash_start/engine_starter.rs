@@ -60,6 +60,12 @@ where
     pub fn new_catapult(&self, signature: usize, new_cata: usize) {
         self.catapults[signature].write().unwrap().insert(new_cata);
     }
+
+    pub fn clear_all_catapults(&self) {
+        for catapult_set in self.catapults.iter() {
+            catapult_set.write().unwrap().clear();
+        }
+    }
 }
 
 #[cfg(test)]

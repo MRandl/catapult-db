@@ -39,72 +39,42 @@ struct Args {
     #[arg(short, long)]
     catapults: bool,
 
-    /// Number of threads to use for parallel search
-    #[arg(short, long, default_value_t = 1)]
-    threads: usize,
+    /// Number of threads to use for parallel search (comma-separated list, e.g., "1,2,4,8")
+    #[arg(short, long, value_delimiter = ',')]
+    threads: Vec<usize>,
 
     /// Number of neighbors to return for each query
     #[arg(long)]
     num_neighbors: usize,
 
-    /// Width for beam search
-    #[arg(long)]
-    beam_width: usize,
+    /// Width for beam search (comma-separated list, e.g., "10,20,40")
+    #[arg(long, value_delimiter = ',')]
+    beam_width: Vec<usize>,
 }
 
-fn main() {
-    const {
-        assert!(cfg!(target_endian = "little"));
-        // parsing DiskANN files requires little endian.
-    }
-    let args = Args::parse();
-
-    // Load the adjacency graph from file
-    println!("Loading adjacency graph...");
-    let adjacency = AdjacencyGraph::<FifoSet<30>, FlatSearch>::load_flat_from_path(
-        PathBuf::from_str(&args.graph).unwrap(),
-        PathBuf::from_str(&args.payload).unwrap(),
-    );
-
-    let queries: Vec<Vec<AlignedBlock>> = Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries)
-        .into_iter()
-        .take(300_000)
-        .collect();
-
-    let graph_size = adjacency.len();
-    let num_hash = 16;
-    let plane_dim = queries[0].len() * SIMD_LANECOUNT;
-    let engine_seed = 42;
-    let engine = EngineStarter::<FifoSet<30>>::new(
-        num_hash,
-        plane_dim,
-        graph_size,
-        engine_seed,
-        args.catapults,
-    );
-
-    let full_graph = Arc::new(AdjacencyGraph::new_flat(
-        adjacency,
-        engine,
-        if args.catapults {
-            FlatCatapultChoice::CatapultsEnabled
-        } else {
-            FlatCatapultChoice::CatapultsDisabled
-        },
-    ));
-    println!("Adjacency graph loaded with {graph_size} nodes");
-
-    let num_threads = args.threads;
+fn run_search_job(
+    graph: Arc<AdjacencyGraph<FifoSet<30>, FlatSearch>>,
+    queries: Arc<Vec<Vec<AlignedBlock>>>,
+    num_threads: usize,
+    beam_width: usize,
+    num_neighbors: usize,
+    catapults_enabled: bool,
+) {
     let num_queries = queries.len();
-    println!("Starting search of {num_queries} vectors using {num_threads} thread(s)...");
+    println!("\n==========");
+    println!(
+        "Running with threads={}, beam_width={}",
+        num_threads, beam_width
+    );
+    println!("==========");
+
     let start_time = std::time::Instant::now();
 
-    let queries = Arc::new(queries);
     let batch_size = 4096;
     let next_batch = Arc::new(AtomicUsize::new(0));
     let handles: Vec<_> = (0..num_threads)
         .map(|_thread_id| {
-            let graph = Arc::clone(&full_graph);
+            let graph = Arc::clone(&graph);
             let queries_clone = Arc::clone(&queries);
             let next_batch_clone = Arc::clone(&next_batch);
 
@@ -127,8 +97,8 @@ fn main() {
                     for query in &queries_clone[batch_start..batch_end] {
                         let _result = black_box(graph.beam_search(
                             query,
-                            args.num_neighbors,
-                            args.beam_width,
+                            num_neighbors,
+                            beam_width,
                             &mut local_stats,
                         ));
                         local_results.push(_result[0]);
@@ -148,7 +118,7 @@ fn main() {
         combined_stats = combined_stats.merge(&local_stats)
     }
 
-    if args.catapults {
+    if catapults_enabled {
         let catapult_usage_pct = if num_queries > 0 {
             (combined_stats.get_searches_with_catapults() as f64 / num_queries as f64) * 100.0
         } else {
@@ -178,7 +148,7 @@ fn main() {
     }
 
     println!(
-        "{:?}",
+        "Checksum: {:?}",
         reses.into_iter().map(|e| e.index).reduce(|a, b| a + b)
     );
 
@@ -190,4 +160,79 @@ fn main() {
         elapsed.as_secs_f64(),
         total_qps
     );
+}
+
+fn main() {
+    const {
+        assert!(cfg!(target_endian = "little"));
+        // parsing DiskANN files requires little endian.
+    }
+    let args = Args::parse();
+
+    // Load the adjacency graph from file
+    println!("Loading adjacency graph...");
+    let adjacency = AdjacencyGraph::<FifoSet<30>, FlatSearch>::load_flat_from_path(
+        PathBuf::from_str(&args.graph).unwrap(),
+        PathBuf::from_str(&args.payload).unwrap(),
+    );
+    let graph_size = adjacency.len();
+
+    let queries: Vec<Vec<AlignedBlock>> = Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries)
+        .into_iter()
+        .take(300_000)
+        .collect();
+
+    let starter_node = 0;
+    let num_hash = 16;
+    let plane_dim = queries[0].len() * SIMD_LANECOUNT;
+    let engine_seed = 42;
+    let engine = EngineStarter::<FifoSet<30>>::new(
+        num_hash,
+        plane_dim,
+        starter_node,
+        engine_seed,
+        args.catapults,
+    );
+
+    let full_graph = Arc::new(AdjacencyGraph::new_flat(
+        adjacency,
+        engine,
+        if args.catapults {
+            FlatCatapultChoice::CatapultsEnabled
+        } else {
+            FlatCatapultChoice::CatapultsDisabled
+        },
+    ));
+    println!("Adjacency graph loaded with {graph_size} nodes");
+
+    let queries = Arc::new(queries);
+
+    println!("\nStarting cartesian product sweep:");
+    println!("  Threads: {:?}", args.threads);
+    println!("  Beam widths: {:?}", args.beam_width);
+    println!(
+        "  Total jobs: {}",
+        args.threads.len() * args.beam_width.len()
+    );
+
+    // Run cartesian product of threads and beam_width
+    for &num_threads in &args.threads {
+        for &beam_width in &args.beam_width {
+            // Clear all catapults before each job to ensure a clean slate
+            full_graph.clear_all_catapults();
+
+            run_search_job(
+                Arc::clone(&full_graph),
+                Arc::clone(&queries),
+                num_threads,
+                beam_width,
+                args.num_neighbors,
+                args.catapults,
+            );
+        }
+    }
+
+    println!("\n==========");
+    println!("All jobs completed!");
+    println!("==========");
 }

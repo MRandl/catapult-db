@@ -210,6 +210,10 @@ where
         }
         search_results
     }
+
+    pub fn clear_all_catapults(&self) {
+        self.starter.clear_all_catapults();
+    }
 }
 
 /*impl<EvictPolicy> AdjacencyGraph<EvictPolicy, HNSWSearch>
