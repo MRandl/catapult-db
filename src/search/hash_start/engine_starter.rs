@@ -44,7 +44,7 @@ where
         }
     }
 
-    pub fn insert_catapult(&self, signature: usize, new_cata: usize) {
+    pub fn new_catapult(&self, signature: usize, new_cata: usize) {
         self.catapults[signature].write().unwrap().insert(new_cata);
     }
 }
@@ -95,7 +95,7 @@ mod tests {
         let signature = result.signature;
 
         // Insert a catapult for this signature
-        starter.insert_catapult(signature, 42);
+        starter.new_catapult(signature, 42);
 
         // Retrieve again and verify the catapult is included
         let result2 = starter.select_starting_points(&query);
@@ -109,7 +109,7 @@ mod tests {
         let query = create_test_query(1.0);
 
         let result = starter.select_starting_points(&query);
-        starter.insert_catapult(result.signature, 99);
+        starter.new_catapult(result.signature, 99);
 
         // Query again multiple times
         for _ in 0..3 {
@@ -179,9 +179,9 @@ mod tests {
         let signature = result.signature;
 
         // Insert multiple catapults for the same signature
-        starter.insert_catapult(signature, 100);
-        starter.insert_catapult(signature, 200);
-        starter.insert_catapult(signature, 300);
+        starter.new_catapult(signature, 100);
+        starter.new_catapult(signature, 200);
+        starter.new_catapult(signature, 300);
 
         let result2 = starter.select_starting_points(&query);
 
@@ -202,8 +202,8 @@ mod tests {
         let result2 = starter.select_starting_points(&query2);
 
         // Insert catapults for different signatures
-        starter.insert_catapult(result1.signature, 111);
-        starter.insert_catapult(result2.signature, 222);
+        starter.new_catapult(result1.signature, 111);
+        starter.new_catapult(result2.signature, 222);
 
         let result1_again = starter.select_starting_points(&query1);
         let result2_again = starter.select_starting_points(&query2);
@@ -272,7 +272,7 @@ mod tests {
 
         // Insert more than FifoSet capacity (30 items)
         for i in 0..35 {
-            starter.insert_catapult(signature, i);
+            starter.new_catapult(signature, i);
         }
 
         let result2 = starter.select_starting_points(&query);

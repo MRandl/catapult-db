@@ -77,6 +77,7 @@ where
         &self,
         indices: &[usize],
         query: &[AlignedBlock],
+        catapult_marker: bool,
     ) -> Vec<CandidateEntry> {
         indices
             .iter()
@@ -87,6 +88,7 @@ where
                 CandidateEntry {
                     distance: starting_score.into(),
                     index,
+                    has_catapult_ancestor: catapult_marker,
                 }
             })
             .collect()
@@ -119,69 +121,62 @@ where
     fn beam_search_raw(
         &self,
         query: &[AlignedBlock],
-        starting_indices: &[usize],
+        starting_candidates: &[CandidateEntry],
         k: usize,
         beam_width: usize,
         level: <SearchAlgo::FixedSetType as FixedSet>::LevelContext,
         stats: &mut crate::statistics::Stats,
-    ) -> Vec<usize> {
+    ) -> Vec<CandidateEntry> {
         assert!(beam_width >= k);
+        stats.bump_beam_calls();
 
         let mut candidates: SmallestKCandidates = SmallestKCandidates::new(beam_width);
         let mut visited = CompressedBitset::new();
 
-        let starting_candidates = self.distances_from_indices(starting_indices, query);
         candidates.insert_batch(&starting_candidates);
 
-        // among the LSH-suggested entry points, one of them is 'the best'. Let's identify it.
-        let initial_best_node = candidates
-            .iter()
-            .min()
-            .map(|entry| entry.index)
-            .expect("Corrupted LSH entries. Please provide a non-degenerate hashing engine, or just use its default constructor.");
+        // among the suggested entry points, one of them is 'the best'. Let's identify it.
+        let initial_best_node = candidates.iter().min().copied().expect(
+            "Corrupted starting point entries. Provide a non-empty starting_indices lists.",
+        );
 
-        let mut best_index_in_candidates: Option<usize> = Some(initial_best_node);
-        let used_catapult_this_search = false;
+        let mut best_candidate: Option<CandidateEntry> = Some(initial_best_node);
 
         // while we have some node on which to expand (at first, the best LSH entry point),
         // we keep expanding it (i.e. looking at its neighbors for better guesses)
-        while let Some(best_candidate_index) = best_index_in_candidates {
-            let best_candidate_node = &self.adjacency[best_candidate_index];
-            stats.bump_nodes_expanded();
-
+        while let Some(best_candidate_node) = best_candidate {
+            let best_candidate_neighs = &self.adjacency[best_candidate_node.index].neighbors;
             // identify the neighbors and catapult landing points of our current best guess.
             // All of these guys become candidates for expansion. if we have too many candidates
             // (beam width parameter), the `candidates` data structure takes care of removing the
             // worst ones (and the duplicates).
-            let regular_neighbors = &best_candidate_node.neighbors.to_level(level);
-            let regular_added =
-                candidates.insert_batch(&self.distances_from_indices(regular_neighbors, query));
-            stats.bump_regular_neighbors_added(regular_added);
+            let neighbors = &best_candidate_neighs.to_level(level);
+            let neighbor_distances = self.distances_from_indices(
+                neighbors,
+                query,
+                best_candidate_node.has_catapult_ancestor,
+            );
+            stats.bump_computed_dists(neighbors.len());
+            candidates.insert_batch(&neighbor_distances);
 
             // mark our current node as visited (not to be expanded again)
-            visited.set(best_candidate_index);
+            visited.set(best_candidate_node.index);
+            stats.bump_nodes_visited();
 
             // and find some other guy to expand, if possible. If not, we call it a day and return our best guesses.
-            best_index_in_candidates = candidates
+            best_candidate = candidates
                 .iter()
                 .filter(|&elem| !visited.get(elem.index))
                 .min()
-                .map(|e| e.index)
+                .copied()
         }
 
         // we have beam_width neighbors, we only need k so we need to rerank
         let mut candidate_vec = candidates.into_iter().collect::<Vec<_>>();
         candidate_vec.sort(); // note: implicitly relying on CandidateEntry ordering here
 
-        // just before returning, add the catapult if we are in catapult mode
-        // todo: add catapult back into the hash_starter if required to do so
-
-        if used_catapult_this_search {
-            stats.bump_searches_with_catapults();
-        }
-
         // and return the best k, job done :)
-        candidate_vec.into_iter().map(|e| e.index).take(k).collect()
+        candidate_vec.into_iter().take(k).collect()
     }
 }
 
@@ -195,10 +190,23 @@ where
         k: usize,
         beam_width: usize,
         stats: &mut crate::statistics::Stats,
-    ) -> Vec<usize> {
+    ) -> Vec<CandidateEntry> {
         let hash_search = self.starter.select_starting_points(query);
+        let signature = hash_search.signature;
         let entry_points = hash_search.start_points;
-        self.beam_search_raw(query, &entry_points, k, beam_width, (), stats)
+
+        let mut distances = self.distances_from_indices(&entry_points, query, true);
+        distances[0].has_catapult_ancestor = false;
+
+        let search_results = self.beam_search_raw(query, &distances, k, beam_width, (), stats);
+        let best_result = search_results[0].index;
+
+        self.starter.new_catapult(signature, best_result);
+
+        if search_results.iter().any(|e| e.has_catapult_ancestor) {
+            stats.bump_searches_with_catapults();
+        }
+        search_results
     }
 }
 
@@ -365,8 +373,8 @@ mod tests {
         // Final candidates (in order of distance): 1 (1), 2 (81), 0 (121)
         // Top K=2 results: [1, 2]
         assert_eq!(results.len(), k);
-        assert_eq!(results[0], 1);
-        assert_eq!(results[1], 2);
+        assert_eq!(results[0].index, 1);
+        assert_eq!(results[1].index, 2);
 
         // Verify the graph structure - count total edges
         let total_edges: usize = graph
@@ -410,8 +418,8 @@ mod tests {
         let results = graph.beam_search(&query, k, beam_width, &mut stats);
         // Top K=2 results: [1, 2]
         assert_eq!(results.len(), k);
-        assert_eq!(results[0], 1);
-        assert_eq!(results[1], 2);
+        assert_eq!(results[0].index, 1);
+        assert_eq!(results[1].index, 2);
     }
 
     #[test]
@@ -463,7 +471,7 @@ mod tests {
 
         // The globally best result (Node 4) must be found and returned.
         assert_eq!(results.len(), k);
-        assert_eq!(results[0], 4);
+        assert_eq!(results[0].index, 4);
     }
 
     /*

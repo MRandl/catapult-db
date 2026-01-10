@@ -135,16 +135,7 @@ fn main() {
     for handle in handles {
         let (local_results, local_stats) = handle.join().expect("Thread panicked");
         reses.extend(local_results);
-
-        // Merge stats from this thread
-        for _ in 0..local_stats.get_searches_with_catapults() {
-            combined_stats.bump_searches_with_catapults();
-        }
-        combined_stats.bump_catapults_used(local_stats.get_catapults_used());
-        combined_stats.bump_regular_neighbors_added(local_stats.get_regular_neighbors_added());
-        for _ in 0..local_stats.get_nodes_expanded() {
-            combined_stats.bump_nodes_expanded();
-        }
+        combined_stats = combined_stats.merge(&local_stats)
     }
 
     if args.catapults {
@@ -153,33 +144,33 @@ fn main() {
         } else {
             0.0
         };
-        let avg_nodes_expanded = combined_stats.get_nodes_expanded() as f64 / num_queries as f64;
-        let avg_regular_added =
-            combined_stats.get_regular_neighbors_added() as f64 / num_queries as f64;
-        let avg_catapults_added = combined_stats.get_catapults_used() as f64 / num_queries as f64;
+        let avg_dists_computed = combined_stats.get_computed_dists() as f64 / num_queries as f64;
+        let avg_nodes_visited = combined_stats.get_nodes_visited() as f64 / num_queries as f64;
+        let avg_catapults_added =
+            combined_stats.get_searches_with_catapults() as f64 / num_queries as f64;
         println!(
-            "Catapult stats: {}/{} searches used catapults ({:.2}%), {} total catapult edges used",
+            "Catapult stats: {}/{} searches used catapults ({:.2}%)",
             combined_stats.get_searches_with_catapults(),
             num_queries,
             catapult_usage_pct,
-            combined_stats.get_catapults_used()
         );
         println!(
-            "  Avg per search: {:.2} nodes expanded, {:.2} regular neighbors added, {:.2} catapult neighbors added",
-            avg_nodes_expanded, avg_regular_added, avg_catapults_added
+            "  Avg per search: {:.2} dists computed, {:.2} nodes visited, {:.2} catapult used",
+            avg_dists_computed, avg_nodes_visited, avg_catapults_added
         );
     } else {
-        let avg_nodes_expanded = combined_stats.get_nodes_expanded() as f64 / num_queries as f64;
-        let avg_regular_added =
-            combined_stats.get_regular_neighbors_added() as f64 / num_queries as f64;
+        let avg_dists_computed = combined_stats.get_computed_dists() as f64 / num_queries as f64;
+        let avg_visited_nodes = combined_stats.get_nodes_visited() as f64 / num_queries as f64;
         println!(
-            "Avg per search: {:.2} nodes expanded, {:.2} regular neighbors added",
-            avg_nodes_expanded, avg_regular_added
+            "Avg per search: {:.2} dists computed, {:.2} visited nodes",
+            avg_dists_computed, avg_visited_nodes
         );
     }
-    let reses = reses;
 
-    println!("{:?}", reses.into_iter().reduce(|a, b| a + b));
+    println!(
+        "{:?}",
+        reses.into_iter().map(|e| e.index).reduce(|a, b| a + b)
+    );
 
     let elapsed = start_time.elapsed();
     let total_qps = num_queries as f64 / elapsed.as_secs_f64();
