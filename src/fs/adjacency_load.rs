@@ -1,6 +1,6 @@
 use crate::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
-    search::{AdjacencyGraph, FlatSearch, Node},
+    search::{AdjacencyGraph, Node, graph_algo::FlatSearch},
     sets::{catapults::CatapultEvictingStructure, fixed::FlatFixedSet},
 };
 
@@ -118,7 +118,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        search::{AdjacencyGraph, FlatSearch},
+        search::{AdjacencyGraph, graph_algo::FlatSearch},
         sets::{catapults::FifoSet, fixed::FixedSet},
     };
 

@@ -1,7 +1,7 @@
 use crate::{
     numerics::{AlignedBlock, VectorLike},
     search::{
-        graph_hierarchy::{FlatCatapultChoice, FlatSearch, GraphSearchAlgorithm},
+        graph_algo::{FlatCatapultChoice, FlatSearch, GraphSearchAlgorithm},
         hash_start::EngineStarter,
         node::Node,
     },
@@ -31,7 +31,7 @@ where
 {
     adjacency: Vec<Node<Algo::FixedSetType>>,
     starter: Algo::StartingPointSelector<EvictPolicy>,
-    _catapults: Algo::CatapultChoice,
+    catapults: Algo::CatapultChoice,
 }
 
 impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
@@ -46,7 +46,7 @@ where
         Self {
             adjacency: adj,
             starter: engine,
-            _catapults: catapults,
+            catapults,
         }
     }
 }
@@ -202,7 +202,7 @@ where
         let search_results = self.beam_search_raw(query, &distances, k, beam_width, (), stats);
         let best_result = search_results[0].index;
 
-        if FlatSearch::local_catapults_enabled(self._catapults) {
+        if self.catapults.local_enabled() {
             self.starter.new_catapult(signature, best_result);
             if search_results.iter().any(|e| e.has_catapult_ancestor) {
                 stats.bump_searches_with_catapults();
@@ -307,7 +307,7 @@ mod tests {
     use crate::{
         numerics::SIMD_LANECOUNT,
         search::{
-            graph_hierarchy::{FlatCatapultChoice, FlatSearch},
+            graph_algo::{FlatCatapultChoice, FlatSearch},
             hash_start::EngineStarter,
         },
         sets::{catapults::FifoSet, fixed::FlatFixedSet},

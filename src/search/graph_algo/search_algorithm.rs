@@ -1,40 +1,13 @@
-use crate::{
-    search::hash_start::EngineStarter,
-    sets::{
-        catapults::CatapultEvictingStructure,
-        fixed::{FixedSet, FlatFixedSet},
-    },
-};
+use crate::sets::{catapults::CatapultEvictingStructure, fixed::FixedSet};
 
 pub trait GraphSearchAlgorithm {
     type CatapultChoice: Clone + Copy;
     type StartingPointSelector<T: CatapultEvictingStructure>;
     type FixedSetType: FixedSet;
-
-    fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool;
 }
 
 // search mode 1: Flat search, where one search is performed on a big graph.
 // Typical example for this behavior is DiskANN. This does not make use of recursive graphs like HNSW.
-pub struct FlatSearch;
-
-#[repr(u8)]
-#[derive(PartialEq, Eq, Clone, Copy)]
-pub enum FlatCatapultChoice {
-    // in non-HNSW workloads, catapults are either on or off
-    CatapultsDisabled = 0,
-    CatapultsEnabled = 1,
-}
-
-impl GraphSearchAlgorithm for FlatSearch {
-    type CatapultChoice = FlatCatapultChoice;
-    type StartingPointSelector<T: CatapultEvictingStructure> = EngineStarter<T>;
-    type FixedSetType = FlatFixedSet;
-
-    fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
-        strategy == FlatCatapultChoice::CatapultsEnabled
-    }
-}
 
 // Search mode 2: HNSW, which makes use of stacked graphs which get progressively denser
 // This one has a few option for catapult generation. SameLevel means that catapults are

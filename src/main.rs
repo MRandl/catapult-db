@@ -1,7 +1,11 @@
 use catapult::{
     fs::Queries,
     numerics::{AlignedBlock, SIMD_LANECOUNT},
-    search::{AdjacencyGraph, FlatCatapultChoice, FlatSearch, hash_start::EngineStarter},
+    search::{
+        AdjacencyGraph,
+        graph_algo::{FlatCatapultChoice, FlatSearch},
+        hash_start::EngineStarter,
+    },
     sets::catapults::FifoSet,
     statistics::Stats,
 };
