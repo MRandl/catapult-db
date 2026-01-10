@@ -1,0 +1,185 @@
+Running 30 configurations (threads: [1, 2, 4, 8, 16], beam_width: [1, 2, 4, 8, 16, 32])
+================================================================================
+
+--- Configuration: threads=1, beam_width=1 ---
+Catapult stats: 295300/300000 searches used catapults (98.43%), 1268697 total catapult edges used
+  Avg per search: 2.74 nodes expanded, 4.03 regular neighbors added, 4.23 catapult neighbors added
+Sanity check sum: Some(143781058983)
+Completed 300000 searches in 17.25s (17393.72 QPS)
+
+--- Configuration: threads=1, beam_width=2 ---
+Catapult stats: 296311/300000 searches used catapults (98.77%), 2010348 total catapult edges used
+  Avg per search: 4.22 nodes expanded, 9.26 regular neighbors added, 6.70 catapult neighbors added
+Sanity check sum: Some(145897595194)
+Completed 300000 searches in 21.91s (13689.69 QPS)
+
+--- Configuration: threads=1, beam_width=4 ---
+Catapult stats: 296669/300000 searches used catapults (98.89%), 3125973 total catapult edges used
+  Avg per search: 6.46 nodes expanded, 19.30 regular neighbors added, 10.42 catapult neighbors added
+Sanity check sum: Some(147077271737)
+Completed 300000 searches in 29.99s (10004.95 QPS)
+
+--- Configuration: threads=1, beam_width=8 ---
+Catapult stats: 296875/300000 searches used catapults (98.96%), 4648132 total catapult edges used
+  Avg per search: 10.47 nodes expanded, 37.94 regular neighbors added, 15.49 catapult neighbors added
+Sanity check sum: Some(147733649967)
+Completed 300000 searches in 46.22s (6490.41 QPS)
+
+--- Configuration: threads=1, beam_width=16 ---
+Catapult stats: 297059/300000 searches used catapults (99.02%), 6395533 total catapult edges used
+  Avg per search: 17.88 nodes expanded, 70.55 regular neighbors added, 21.32 catapult neighbors added
+Sanity check sum: Some(148261483131)
+Completed 300000 searches in 75.61s (3967.73 QPS)
+
+--- Configuration: threads=1, beam_width=32 ---
+Catapult stats: 297197/300000 searches used catapults (99.07%), 7536887 total catapult edges used
+  Avg per search: 32.33 nodes expanded, 121.89 regular neighbors added, 25.12 catapult neighbors added
+Sanity check sum: Some(148614399064)
+Completed 300000 searches in 134.74s (2226.58 QPS)
+
+--- Configuration: threads=2, beam_width=1 ---
+Catapult stats: 295343/300000 searches used catapults (98.45%), 1264720 total catapult edges used
+  Avg per search: 2.73 nodes expanded, 4.03 regular neighbors added, 4.22 catapult neighbors added
+Sanity check sum: Some(143633260602)
+Completed 300000 searches in 7.53s (39842.50 QPS)
+
+--- Configuration: threads=2, beam_width=2 ---
+Catapult stats: 296319/300000 searches used catapults (98.77%), 2008634 total catapult edges used
+  Avg per search: 4.22 nodes expanded, 9.28 regular neighbors added, 6.70 catapult neighbors added
+Sanity check sum: Some(145825993518)
+Completed 300000 searches in 10.96s (27379.13 QPS)
+
+--- Configuration: threads=2, beam_width=4 ---
+Catapult stats: 296671/300000 searches used catapults (98.89%), 3118111 total catapult edges used
+  Avg per search: 6.46 nodes expanded, 19.30 regular neighbors added, 10.39 catapult neighbors added
+Sanity check sum: Some(146877415032)
+Completed 300000 searches in 16.01s (18737.01 QPS)
+
+--- Configuration: threads=2, beam_width=8 ---
+Catapult stats: 296872/300000 searches used catapults (98.96%), 4647027 total catapult edges used
+  Avg per search: 10.47 nodes expanded, 37.96 regular neighbors added, 15.49 catapult neighbors added
+Sanity check sum: Some(147692566728)
+Completed 300000 searches in 24.76s (12113.92 QPS)
+
+--- Configuration: threads=2, beam_width=16 ---
+Catapult stats: 297053/300000 searches used catapults (99.02%), 6398572 total catapult edges used
+  Avg per search: 17.88 nodes expanded, 70.56 regular neighbors added, 21.33 catapult neighbors added
+Sanity check sum: Some(148281116518)
+Completed 300000 searches in 40.78s (7356.99 QPS)
+
+--- Configuration: threads=2, beam_width=32 ---
+Catapult stats: 297196/300000 searches used catapults (99.07%), 7536328 total catapult edges used
+  Avg per search: 32.34 nodes expanded, 121.93 regular neighbors added, 25.12 catapult neighbors added
+Sanity check sum: Some(148609721600)
+Completed 300000 searches in 72.20s (4155.06 QPS)
+
+--- Configuration: threads=4, beam_width=1 ---
+Catapult stats: 295278/300000 searches used catapults (98.43%), 1264715 total catapult edges used
+  Avg per search: 2.74 nodes expanded, 4.04 regular neighbors added, 4.22 catapult neighbors added
+Sanity check sum: Some(144351855736)
+Completed 300000 searches in 3.83s (78301.87 QPS)
+
+--- Configuration: threads=4, beam_width=2 ---
+Catapult stats: 296304/300000 searches used catapults (98.77%), 2007533 total catapult edges used
+  Avg per search: 4.23 nodes expanded, 9.28 regular neighbors added, 6.69 catapult neighbors added
+Sanity check sum: Some(146113965400)
+Completed 300000 searches in 5.47s (54876.77 QPS)
+
+--- Configuration: threads=4, beam_width=4 ---
+Catapult stats: 296668/300000 searches used catapults (98.89%), 3119948 total catapult edges used
+  Avg per search: 6.47 nodes expanded, 19.32 regular neighbors added, 10.40 catapult neighbors added
+Sanity check sum: Some(146900786551)
+Completed 300000 searches in 8.19s (36650.12 QPS)
+
+--- Configuration: threads=4, beam_width=8 ---
+Catapult stats: 296869/300000 searches used catapults (98.96%), 4644399 total catapult edges used
+  Avg per search: 10.48 nodes expanded, 37.97 regular neighbors added, 15.48 catapult neighbors added
+Sanity check sum: Some(147864041218)
+Completed 300000 searches in 12.69s (23641.52 QPS)
+
+--- Configuration: threads=4, beam_width=16 ---
+Catapult stats: 297053/300000 searches used catapults (99.02%), 6394724 total catapult edges used
+  Avg per search: 17.89 nodes expanded, 70.63 regular neighbors added, 21.32 catapult neighbors added
+Sanity check sum: Some(148245975408)
+Completed 300000 searches in 21.60s (13889.07 QPS)
+
+--- Configuration: threads=4, beam_width=32 ---
+Catapult stats: 297193/300000 searches used catapults (99.06%), 7539211 total catapult edges used
+  Avg per search: 32.34 nodes expanded, 121.97 regular neighbors added, 25.13 catapult neighbors added
+Sanity check sum: Some(148594239280)
+Completed 300000 searches in 38.50s (7791.84 QPS)
+
+--- Configuration: threads=8, beam_width=1 ---
+Catapult stats: 295278/300000 searches used catapults (98.43%), 1260481 total catapult edges used
+  Avg per search: 2.74 nodes expanded, 4.04 regular neighbors added, 4.20 catapult neighbors added
+Sanity check sum: Some(143647019445)
+Completed 300000 searches in 2.84s (105607.47 QPS)
+
+--- Configuration: threads=8, beam_width=2 ---
+Catapult stats: 296304/300000 searches used catapults (98.77%), 2000912 total catapult edges used
+  Avg per search: 4.23 nodes expanded, 9.30 regular neighbors added, 6.67 catapult neighbors added
+Sanity check sum: Some(146155633193)
+Completed 300000 searches in 4.36s (68736.18 QPS)
+
+--- Configuration: threads=8, beam_width=4 ---
+Catapult stats: 296635/300000 searches used catapults (98.88%), 3105059 total catapult edges used
+  Avg per search: 6.48 nodes expanded, 19.37 regular neighbors added, 10.35 catapult neighbors added
+Sanity check sum: Some(146731075495)
+Completed 300000 searches in 6.36s (47162.37 QPS)
+
+--- Configuration: threads=8, beam_width=8 ---
+Catapult stats: 296856/300000 searches used catapults (98.95%), 4639589 total catapult edges used
+  Avg per search: 10.48 nodes expanded, 38.02 regular neighbors added, 15.47 catapult neighbors added
+Sanity check sum: Some(147651309300)
+Completed 300000 searches in 9.89s (30346.46 QPS)
+
+--- Configuration: threads=8, beam_width=16 ---
+Catapult stats: 297051/300000 searches used catapults (99.02%), 6387053 total catapult edges used
+  Avg per search: 17.91 nodes expanded, 70.73 regular neighbors added, 21.29 catapult neighbors added
+Sanity check sum: Some(148237782028)
+Completed 300000 searches in 16.02s (18729.32 QPS)
+
+--- Configuration: threads=8, beam_width=32 ---
+Catapult stats: 297193/300000 searches used catapults (99.06%), 7541702 total catapult edges used
+  Avg per search: 32.36 nodes expanded, 122.14 regular neighbors added, 25.14 catapult neighbors added
+Sanity check sum: Some(148587318378)
+Completed 300000 searches in 27.82s (10783.58 QPS)
+
+--- Configuration: threads=16, beam_width=1 ---
+Catapult stats: 295242/300000 searches used catapults (98.41%), 1252773 total catapult edges used
+  Avg per search: 2.76 nodes expanded, 4.06 regular neighbors added, 4.18 catapult neighbors added
+Sanity check sum: Some(144216898620)
+Completed 300000 searches in 2.71s (110757.28 QPS)
+
+--- Configuration: threads=16, beam_width=2 ---
+Catapult stats: 296294/300000 searches used catapults (98.76%), 1981376 total catapult edges used
+  Avg per search: 4.25 nodes expanded, 9.33 regular neighbors added, 6.60 catapult neighbors added
+Sanity check sum: Some(146320804518)
+Completed 300000 searches in 3.91s (76808.70 QPS)
+
+--- Configuration: threads=16, beam_width=4 ---
+Catapult stats: 296637/300000 searches used catapults (98.88%), 3101435 total catapult edges used
+  Avg per search: 6.50 nodes expanded, 19.44 regular neighbors added, 10.34 catapult neighbors added
+Sanity check sum: Some(146879147816)
+Completed 300000 searches in 5.20s (57739.52 QPS)
+
+--- Configuration: threads=16, beam_width=8 ---
+Catapult stats: 296862/300000 searches used catapults (98.95%), 4630590 total catapult edges used
+  Avg per search: 10.51 nodes expanded, 38.16 regular neighbors added, 15.44 catapult neighbors added
+Sanity check sum: Some(147528280894)
+Completed 300000 searches in 7.33s (40920.11 QPS)
+
+--- Configuration: threads=16, beam_width=16 ---
+Catapult stats: 297050/300000 searches used catapults (99.02%), 6386456 total catapult edges used
+  Avg per search: 17.93 nodes expanded, 70.95 regular neighbors added, 21.29 catapult neighbors added
+Sanity check sum: Some(148245862970)
+Completed 300000 searches in 13.67s (21941.62 QPS)
+
+--- Configuration: threads=16, beam_width=32 ---
+Catapult stats: 297190/300000 searches used catapults (99.06%), 7545618 total catapult edges used
+  Avg per search: 32.38 nodes expanded, 122.49 regular neighbors added, 25.15 catapult neighbors added
+Sanity check sum: Some(148636922121)
+Completed 300000 searches in 23.50s (12764.13 QPS)
+
+================================================================================
+All configurations completed!

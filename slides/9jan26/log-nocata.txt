@@ -1,0 +1,155 @@
+Running 30 configurations (threads: [1, 2, 4, 8, 16], beam_width: [1, 2, 4, 8, 16, 32])
+================================================================================
+
+--- Configuration: threads=1, beam_width=1 ---
+Avg per search: 7.47 nodes expanded, 13.73 regular neighbors added
+Sanity check sum: Some(134737572605)
+Completed 300000 searches in 40.43s (7419.33 QPS)
+
+--- Configuration: threads=1, beam_width=2 ---
+Avg per search: 10.15 nodes expanded, 28.73 regular neighbors added
+Sanity check sum: Some(145688728127)
+Completed 300000 searches in 47.45s (6322.40 QPS)
+
+--- Configuration: threads=1, beam_width=4 ---
+Avg per search: 12.88 nodes expanded, 52.88 regular neighbors added
+Sanity check sum: Some(146975676487)
+Completed 300000 searches in 59.67s (5027.65 QPS)
+
+--- Configuration: threads=1, beam_width=8 ---
+Avg per search: 17.09 nodes expanded, 92.22 regular neighbors added
+Sanity check sum: Some(148185901255)
+Completed 300000 searches in 82.34s (3643.42 QPS)
+
+--- Configuration: threads=1, beam_width=16 ---
+Avg per search: 24.48 nodes expanded, 153.32 regular neighbors added
+Sanity check sum: Some(148502706025)
+Completed 300000 searches in 112.08s (2676.76 QPS)
+
+--- Configuration: threads=1, beam_width=32 ---
+Avg per search: 38.82 nodes expanded, 238.29 regular neighbors added
+Sanity check sum: Some(148866573523)
+Completed 300000 searches in 167.30s (1793.18 QPS)
+
+--- Configuration: threads=2, beam_width=1 ---
+Avg per search: 7.47 nodes expanded, 13.73 regular neighbors added
+Sanity check sum: Some(134737572605)
+Completed 300000 searches in 19.86s (15108.96 QPS)
+
+--- Configuration: threads=2, beam_width=2 ---
+Avg per search: 10.15 nodes expanded, 28.73 regular neighbors added
+Sanity check sum: Some(145688728127)
+Completed 300000 searches in 25.67s (11686.48 QPS)
+
+--- Configuration: threads=2, beam_width=4 ---
+Avg per search: 12.88 nodes expanded, 52.88 regular neighbors added
+Sanity check sum: Some(146975676487)
+Completed 300000 searches in 39.58s (7580.26 QPS)
+
+--- Configuration: threads=2, beam_width=8 ---
+Avg per search: 17.09 nodes expanded, 92.22 regular neighbors added
+Sanity check sum: Some(148185901255)
+Completed 300000 searches in 41.69s (7195.20 QPS)
+
+--- Configuration: threads=2, beam_width=16 ---
+Avg per search: 24.48 nodes expanded, 153.32 regular neighbors added
+Sanity check sum: Some(148502706025)
+Completed 300000 searches in 61.49s (4879.22 QPS)
+
+--- Configuration: threads=2, beam_width=32 ---
+Avg per search: 38.82 nodes expanded, 238.29 regular neighbors added
+Sanity check sum: Some(148866573523)
+Completed 300000 searches in 92.10s (3257.46 QPS)
+
+--- Configuration: threads=4, beam_width=1 ---
+Avg per search: 7.47 nodes expanded, 13.73 regular neighbors added
+Sanity check sum: Some(134737572605)
+Completed 300000 searches in 11.32s (26511.79 QPS)
+
+--- Configuration: threads=4, beam_width=2 ---
+Avg per search: 10.15 nodes expanded, 28.73 regular neighbors added
+Sanity check sum: Some(145688728127)
+Completed 300000 searches in 15.55s (19294.70 QPS)
+
+--- Configuration: threads=4, beam_width=4 ---
+Avg per search: 12.88 nodes expanded, 52.88 regular neighbors added
+Sanity check sum: Some(146975676487)
+Completed 300000 searches in 17.54s (17102.76 QPS)
+
+--- Configuration: threads=4, beam_width=8 ---
+Avg per search: 17.09 nodes expanded, 92.22 regular neighbors added
+Sanity check sum: Some(148185901255)
+Completed 300000 searches in 21.67s (13843.41 QPS)
+
+--- Configuration: threads=4, beam_width=16 ---
+Avg per search: 24.48 nodes expanded, 153.32 regular neighbors added
+Sanity check sum: Some(148502706025)
+Completed 300000 searches in 29.42s (10197.92 QPS)
+
+--- Configuration: threads=4, beam_width=32 ---
+Avg per search: 38.82 nodes expanded, 238.29 regular neighbors added
+Sanity check sum: Some(148866573523)
+Completed 300000 searches in 45.22s (6634.82 QPS)
+
+--- Configuration: threads=8, beam_width=1 ---
+Avg per search: 7.47 nodes expanded, 13.73 regular neighbors added
+Sanity check sum: Some(134737572605)
+Completed 300000 searches in 7.30s (41075.26 QPS)
+
+--- Configuration: threads=8, beam_width=2 ---
+Avg per search: 10.15 nodes expanded, 28.73 regular neighbors added
+Sanity check sum: Some(145688728127)
+Completed 300000 searches in 10.37s (28941.72 QPS)
+
+--- Configuration: threads=8, beam_width=4 ---
+Avg per search: 12.88 nodes expanded, 52.88 regular neighbors added
+Sanity check sum: Some(146975676487)
+Completed 300000 searches in 13.29s (22570.75 QPS)
+
+--- Configuration: threads=8, beam_width=8 ---
+Avg per search: 17.09 nodes expanded, 92.22 regular neighbors added
+Sanity check sum: Some(148185901255)
+Completed 300000 searches in 16.65s (18022.93 QPS)
+
+--- Configuration: threads=8, beam_width=16 ---
+Avg per search: 24.48 nodes expanded, 153.32 regular neighbors added
+Sanity check sum: Some(148502706025)
+Completed 300000 searches in 22.79s (13161.95 QPS)
+
+--- Configuration: threads=8, beam_width=32 ---
+Avg per search: 38.82 nodes expanded, 238.29 regular neighbors added
+Sanity check sum: Some(148866573523)
+Completed 300000 searches in 34.72s (8639.98 QPS)
+
+--- Configuration: threads=16, beam_width=1 ---
+Avg per search: 7.47 nodes expanded, 13.73 regular neighbors added
+Sanity check sum: Some(134737572605)
+Completed 300000 searches in 6.92s (43358.86 QPS)
+
+--- Configuration: threads=16, beam_width=2 ---
+Avg per search: 10.15 nodes expanded, 28.73 regular neighbors added
+Sanity check sum: Some(145688728127)
+Completed 300000 searches in 9.50s (31575.55 QPS)
+
+--- Configuration: threads=16, beam_width=4 ---
+Avg per search: 12.88 nodes expanded, 52.88 regular neighbors added
+Sanity check sum: Some(146975676487)
+Completed 300000 searches in 11.04s (27171.90 QPS)
+
+--- Configuration: threads=16, beam_width=8 ---
+Avg per search: 17.09 nodes expanded, 92.22 regular neighbors added
+Sanity check sum: Some(148185901255)
+Completed 300000 searches in 14.79s (20285.82 QPS)
+
+--- Configuration: threads=16, beam_width=16 ---
+Avg per search: 24.48 nodes expanded, 153.32 regular neighbors added
+Sanity check sum: Some(148502706025)
+Completed 300000 searches in 21.05s (14249.66 QPS)
+
+--- Configuration: threads=16, beam_width=32 ---
+Avg per search: 38.82 nodes expanded, 238.29 regular neighbors added
+Sanity check sum: Some(148866573523)
+Completed 300000 searches in 32.11s (9341.72 QPS)
+
+================================================================================
+All configurations completed!
