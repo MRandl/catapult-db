@@ -1,10 +1,11 @@
 use crate::sets::candidates::TotalF32;
 use std::hash::Hash;
 
-#[derive(PartialEq, Eq, Clone, Hash, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Hash, Debug)]
 pub struct CandidateEntry {
     pub distance: TotalF32,
     pub index: usize,
+    pub has_catapult_ancestor: bool,
 }
 
 impl PartialOrd for CandidateEntry {

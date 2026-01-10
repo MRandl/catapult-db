@@ -1,6 +1,6 @@
 use crate::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
-    search::{AdjacencyGraph, FlatSearch, Node},
+    search::{AdjacencyGraph, Node, graph_algo::FlatSearch},
     sets::{catapults::CatapultEvictingStructure, fixed::FlatFixedSet},
 };
 
@@ -8,7 +8,6 @@ use std::{
     fs::File,
     io::{BufReader, Error, Read},
     path::PathBuf,
-    sync::RwLock,
 };
 
 impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
@@ -70,7 +69,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
     pub fn load_flat_from_path(
         graph_path: PathBuf,
         payload_path: PathBuf,
-    ) -> Vec<Node<T, FlatFixedSet>> {
+    ) -> Vec<Node<FlatFixedSet>> {
         let mut graph_file = BufReader::new(File::open(graph_path).expect("FNF")).bytes();
         let mut payload_file = BufReader::new(File::open(payload_path).expect("FNF")).bytes();
 
@@ -104,7 +103,6 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 
             adjacency.push(Node {
                 neighbors: FlatFixedSet::new(neighs),
-                catapults: RwLock::new(T::new()),
                 payload: associated_payload.into_boxed_slice(),
             });
         }
@@ -120,11 +118,8 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        search::{AdjacencyGraph, FlatSearch},
-        sets::{
-            catapults::{CatapultEvictingStructure, FifoSet},
-            fixed::FixedSet,
-        },
+        search::{AdjacencyGraph, graph_algo::FlatSearch},
+        sets::{catapults::FifoSet, fixed::FixedSet},
     };
 
     #[test]
@@ -139,7 +134,6 @@ mod tests {
 
         assert!(graphed.len() == 4);
         for node in graphed.into_iter() {
-            assert!(node.catapults.read().unwrap().to_vec().is_empty());
             assert!(node.neighbors.to_level(()).len() <= 2);
             for i in 0..node.payload.len() {
                 assert!(node.payload[0] == node.payload[i]);

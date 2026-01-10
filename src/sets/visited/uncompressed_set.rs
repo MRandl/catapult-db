@@ -17,8 +17,8 @@ use crate::sets::visited::VisitorSet;
 /// assert!(bs.get(3));
 /// ```
 pub struct UncompressedSet {
-    /*private*/ buffer: Box<[u8]>,
-    /*private*/ capacity: usize,
+    buffer: Box<[u8]>,
+    capacity: usize,
 }
 
 impl UncompressedSet {

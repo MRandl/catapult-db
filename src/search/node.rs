@@ -1,23 +1,16 @@
-use std::{fmt::Debug, sync::RwLock};
+use std::fmt::Debug;
 
-use crate::{
-    numerics::AlignedBlock,
-    sets::{catapults::CatapultEvictingStructure, fixed::FixedSet},
-};
+use crate::{numerics::AlignedBlock, sets::fixed::FixedSet};
 
-pub struct Node<CatapultNeighbors, FixedSetType: FixedSet + Debug> {
+pub struct Node<FixedSetType: FixedSet + Debug> {
     pub neighbors: FixedSetType,
-    pub catapults: RwLock<CatapultNeighbors>,
     pub payload: Box<[AlignedBlock]>,
 }
 
-impl<T: CatapultEvictingStructure + Debug, FixedSetType: FixedSet + Debug> Debug
-    for Node<T, FixedSetType>
-{
+impl<FixedSetType: FixedSet + Debug> Debug for Node<FixedSetType> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Node")
             .field("neighbors", &self.neighbors)
-            .field("catapults", &self.catapults.read().unwrap())
             .field("payload", &self.payload)
             .finish()
     }
@@ -27,7 +20,6 @@ impl<T: CatapultEvictingStructure + Debug, FixedSetType: FixedSet + Debug> Debug
 mod tests {
     use super::*;
     use crate::numerics::SIMD_LANECOUNT;
-    use crate::sets::catapults::UnboundedNeighborSet;
     use crate::sets::fixed::FlatFixedSet;
 
     #[test]
@@ -35,34 +27,12 @@ mod tests {
         let node = Node {
             payload: vec![AlignedBlock::new([1.5; SIMD_LANECOUNT])].into_boxed_slice(),
             neighbors: FlatFixedSet::new(vec![1, 2, 3]),
-            catapults: RwLock::new(UnboundedNeighborSet::new()),
         };
 
         let debug_output = format!("{node:?}");
         let expected = format!(
-            "Node {{ neighbors: FixedSet {{ neighbors: [1, 2, 3] }}, catapults: UnboundedNeighborSet {{ neighbors: [] }}, payload: [AlignedBlock {{ data: {:?} }}] }}",
+            "Node {{ neighbors: FixedSet {{ neighbors: [1, 2, 3] }}, payload: [AlignedBlock {{ data: {:?} }}] }}",
             [1.5; SIMD_LANECOUNT]
-        );
-
-        assert_eq!(debug_output, expected);
-    }
-
-    #[test]
-    fn test_node_debug_format_with_catapults() {
-        let mut catapults = UnboundedNeighborSet::new();
-        catapults.insert(10);
-        catapults.insert(20);
-
-        let node = Node {
-            payload: vec![AlignedBlock::new([2.0; SIMD_LANECOUNT])].into_boxed_slice(),
-            neighbors: FlatFixedSet::new(vec![5]),
-            catapults: RwLock::new(catapults),
-        };
-
-        let debug_output = format!("{node:?}");
-        let expected = format!(
-            "Node {{ neighbors: FixedSet {{ neighbors: [5] }}, catapults: UnboundedNeighborSet {{ neighbors: [10, 20] }}, payload: [AlignedBlock {{ data: {:?} }}] }}",
-            [2.0; SIMD_LANECOUNT]
         );
 
         assert_eq!(debug_output, expected);
@@ -73,12 +43,11 @@ mod tests {
         let node = Node {
             payload: vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])].into_boxed_slice(),
             neighbors: FlatFixedSet::new(vec![]),
-            catapults: RwLock::new(UnboundedNeighborSet::new()),
         };
 
         let debug_output = format!("{node:?}");
         let expected = format!(
-            "Node {{ neighbors: FixedSet {{ neighbors: [] }}, catapults: UnboundedNeighborSet {{ neighbors: [] }}, payload: [AlignedBlock {{ data: {:?} }}] }}",
+            "Node {{ neighbors: FixedSet {{ neighbors: [] }}, payload: [AlignedBlock {{ data: {:?} }}] }}",
             [0.0; SIMD_LANECOUNT]
         );
 
@@ -95,12 +64,11 @@ mod tests {
             ]
             .into_boxed_slice(),
             neighbors: FlatFixedSet::new(vec![1, 2, 3, 4, 5]),
-            catapults: RwLock::new(UnboundedNeighborSet::new()),
         };
 
         let debug_output = format!("{node:?}");
         let expected = format!(
-            "Node {{ neighbors: FixedSet {{ neighbors: [1, 2, 3, 4, 5] }}, catapults: UnboundedNeighborSet {{ neighbors: [] }}, payload: [AlignedBlock {{ data: {:?} }}, AlignedBlock {{ data: {:?} }}, AlignedBlock {{ data: {:?} }}] }}",
+            "Node {{ neighbors: FixedSet {{ neighbors: [1, 2, 3, 4, 5] }}, payload: [AlignedBlock {{ data: {:?} }}, AlignedBlock {{ data: {:?} }}, AlignedBlock {{ data: {:?} }}] }}",
             [1.0; SIMD_LANECOUNT], [2.0; SIMD_LANECOUNT], [3.0; SIMD_LANECOUNT]
         );
 

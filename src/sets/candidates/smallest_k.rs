@@ -48,13 +48,13 @@ impl SmallestKCandidates {
             // 3. size Management
             if self.sorted_members.len() < self.capacity {
                 // Not full yet: maintain sort order by inserting at idx
-                self.sorted_members.insert(idx, item.clone());
+                self.sorted_members.insert(idx, *item);
                 added_count += 1;
             } else if idx < self.capacity {
                 // Full, but new item is smaller than our current max (last element)
                 // Remove the largest element and insert the new one
                 self.sorted_members.pop();
-                self.sorted_members.insert(idx, item.clone());
+                self.sorted_members.insert(idx, *item);
                 added_count += 1;
             }
             // If idx == self.capacity, item is >= all current members; ignore it.
@@ -97,6 +97,7 @@ mod tests {
             sk.insert_batch(&[CandidateEntry {
                 distance: x.to_f32().unwrap().into(),
                 index: x,
+                has_catapult_ancestor: false,
             }]);
         }
         assert_eq!(sk.sorted_members.len(), 3);
@@ -119,14 +120,17 @@ mod tests {
             CandidateEntry {
                 distance: 10.0.into(),
                 index: 10,
+                has_catapult_ancestor: false,
             },
             CandidateEntry {
                 distance: 5.0.into(),
                 index: 5,
+                has_catapult_ancestor: false,
             },
             CandidateEntry {
                 distance: 10.0.into(),
                 index: 10,
+                has_catapult_ancestor: false,
             }, // Duplicate inside batch
         ];
         sk.insert_batch(&batch_1);
@@ -141,18 +145,22 @@ mod tests {
             CandidateEntry {
                 distance: 2.0.into(),
                 index: 2,
+                has_catapult_ancestor: false,
             }, // New smallest
             CandidateEntry {
                 distance: 5.0.into(),
                 index: 5,
+                has_catapult_ancestor: false,
             }, // Duplicate of existing
             CandidateEntry {
                 distance: 7.0.into(),
                 index: 7,
+                has_catapult_ancestor: false,
             }, // New middle
             CandidateEntry {
                 distance: 1.0.into(),
                 index: 1,
+                has_catapult_ancestor: false,
             }, // New absolute smallest
         ];
         sk.insert_batch(&batch_2);
@@ -176,6 +184,7 @@ mod tests {
         CandidateEntry {
             distance: dist.into(),
             index: idx,
+            has_catapult_ancestor: false,
         }
     }
 

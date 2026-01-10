@@ -24,29 +24,29 @@ impl FixedSet for FlatFixedSet {
     }
 }
 
-#[derive(Debug)]
-pub struct HierarchicalFixedSet {
-    neighbors: Box<[Box<[usize]>]>,
-}
+// #[derive(Debug)]
+// pub struct HierarchicalFixedSet {
+//     neighbors: Box<[Box<[usize]>]>,
+// }
 
-impl HierarchicalFixedSet {
-    pub fn new(initial_values: Vec<Vec<usize>>) -> Self {
-        HierarchicalFixedSet {
-            neighbors: initial_values
-                .into_iter()
-                .map(|v| v.into_boxed_slice())
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-        }
-    }
-}
+// impl HierarchicalFixedSet {
+//     pub fn new(initial_values: Vec<Vec<usize>>) -> Self {
+//         HierarchicalFixedSet {
+//             neighbors: initial_values
+//                 .into_iter()
+//                 .map(|v| v.into_boxed_slice())
+//                 .collect::<Vec<_>>()
+//                 .into_boxed_slice(),
+//         }
+//     }
+// }
 
-impl FixedSet for HierarchicalFixedSet {
-    type LevelContext = usize;
-    fn to_level(&self, level: usize) -> Box<[usize]> {
-        self.neighbors.get(level).unwrap().clone()
-    }
-}
+// impl FixedSet for HierarchicalFixedSet {
+//     type LevelContext = usize;
+//     fn to_level(&self, level: usize) -> Box<[usize]> {
+//         self.neighbors.get(level).unwrap().clone()
+//     }
+// }
 
 impl Debug for FlatFixedSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
