@@ -1,5 +1,5 @@
-use rand::rngs::{StdRng, ThreadRng};
-use rand::{Rng, SeedableRng, rng};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use rand_distr::StandardNormal;
 
 use crate::numerics::{AlignedBlock, SIMD_LANECOUNT, VectorLike};
@@ -11,13 +11,6 @@ pub struct SimilarityHasher {
 }
 
 impl SimilarityHasher {
-    /// Constructs a new hasher with `num_hash` hyperplanes in dimension `dim`,
-    /// using a non‐seeded thread RNG.
-    pub fn new(num_hash: usize, stored_vectors_dim: usize) -> Self {
-        let mut rng: ThreadRng = rng();
-        Self::with_rng(num_hash, stored_vectors_dim, &mut rng)
-    }
-
     /// Constructs a new hasher with `num_hash` hyperplanes in dimension `dim`,
     /// seeded from the given `seed`. This is deterministic.
     pub fn new_seeded(num_hash: usize, stored_vectors_dim: usize, seed: u64) -> Self {
@@ -68,7 +61,7 @@ impl SimilarityHasher {
             .collect()
     }
 
-    pub fn hash_int(&self, vector: &[AlignedBlock]) -> u64 {
+    pub fn hash_int(&self, vector: &[AlignedBlock]) -> usize {
         assert_eq!(
             vector.len(),
             self.stored_vectors_dim / SIMD_LANECOUNT,
@@ -76,9 +69,9 @@ impl SimilarityHasher {
         );
         assert!(self.projections.len() <= u64::BITS as usize); // less than 64 planes to fit signature in u64
 
-        let mut projected = 0u64;
+        let mut projected = 0usize;
         for plane in self.projections.iter() {
-            projected = projected << 1 | (plane.dot(vector) >= 0.0) as u64;
+            projected = projected << 1 | ((plane.dot(vector) >= 0.0) as usize);
         }
 
         projected
@@ -95,14 +88,6 @@ mod tests {
         let h2 = SimilarityHasher::new_seeded(16, SIMD_LANECOUNT * 2, 12345);
         // Same seed → identical projections
         assert_eq!(h1.projections, h2.projections);
-    }
-
-    #[test]
-    fn test_new_and_new_seeded_difference() {
-        // new() is unseeded, so overwhelmingly likely to differ from a seeded one
-        let h_unseeded = SimilarityHasher::new(16, SIMD_LANECOUNT * 2);
-        let h_seeded = SimilarityHasher::new_seeded(16, SIMD_LANECOUNT * 2, 12345);
-        assert_ne!(h_unseeded.projections, h_seeded.projections);
     }
 
     #[test]

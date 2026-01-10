@@ -1,12 +1,14 @@
 use crate::{
-    numerics::AlignedBlock,
     search::hash_start::EngineStarter,
-    sets::fixed::{FixedSet, FlatFixedSet, HierarchicalFixedSet},
+    sets::{
+        catapults::CatapultEvictingStructure,
+        fixed::{FixedSet, FlatFixedSet},
+    },
 };
 
 pub trait GraphSearchAlgorithm {
     type CatapultChoice: Clone + Copy;
-    type StartingPointSelector;
+    type StartingPointSelector<T: CatapultEvictingStructure>;
     type FixedSetType: FixedSet;
 
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool;
@@ -26,7 +28,7 @@ pub enum FlatCatapultChoice {
 
 impl GraphSearchAlgorithm for FlatSearch {
     type CatapultChoice = FlatCatapultChoice;
-    type StartingPointSelector = EngineStarter;
+    type StartingPointSelector<T: CatapultEvictingStructure> = EngineStarter<T>;
     type FixedSetType = FlatFixedSet;
 
     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
@@ -38,22 +40,22 @@ impl GraphSearchAlgorithm for FlatSearch {
 // This one has a few option for catapult generation. SameLevel means that catapults are
 // placed on a given level and cannot 'jump' from one level to the other. Finalizing means that
 // catapults are placed from the entry point (max layer) to the final point of the run (layer 0)
-pub struct HNSWSearch {}
+// pub struct HNSWSearch {}
 
-pub struct HNSWEngineStarter {
-    hasher: EngineStarter,
-    pub max_level: usize,
-}
+// pub struct HNSWEngineStarter {
+//     hasher: EngineStarter,
+//     pub max_level: usize,
+// }
 
-impl HNSWEngineStarter {
-    pub fn new(hasher: EngineStarter, max_level: usize) -> Self {
-        HNSWEngineStarter { hasher, max_level }
-    }
+// impl HNSWEngineStarter {
+//     pub fn new(hasher: EngineStarter, max_level: usize) -> Self {
+//         HNSWEngineStarter { hasher, max_level }
+//     }
 
-    pub fn select_starting_points(&self, query: &[AlignedBlock], k: usize) -> Vec<usize> {
-        self.hasher.select_starting_points(query, k)
-    }
-}
+//     pub fn select_starting_points(&self, query: &[AlignedBlock], k: usize) -> Vec<usize> {
+//         self.hasher.select_starting_points(query, k)
+//     }
+// }
 
 #[repr(u8)]
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -63,12 +65,12 @@ pub enum HNSWCatapultChoice {
     FinalizingCatapults,
 }
 
-impl GraphSearchAlgorithm for HNSWSearch {
-    type CatapultChoice = HNSWCatapultChoice;
-    type StartingPointSelector = HNSWEngineStarter;
-    type FixedSetType = HierarchicalFixedSet;
+// impl GraphSearchAlgorithm for HNSWSearch {
+//     type CatapultChoice = HNSWCatapultChoice;
+//     type StartingPointSelector = HNSWEngineStarter;
+//     type FixedSetType = HierarchicalFixedSet;
 
-    fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
-        strategy == HNSWCatapultChoice::SameLevelCatapults
-    }
-}
+//     fn local_catapults_enabled(strategy: Self::CatapultChoice) -> bool {
+//         strategy == HNSWCatapultChoice::SameLevelCatapults
+//     }
+// }

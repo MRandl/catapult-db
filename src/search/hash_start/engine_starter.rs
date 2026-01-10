@@ -1,54 +1,60 @@
-use rand::{SeedableRng, rngs::StdRng, seq::index::sample};
-use std::collections::HashMap;
 use std::sync::RwLock;
 
+use crate::sets::catapults::CatapultEvictingStructure;
 use crate::{numerics::AlignedBlock, search::hash_start::hasher::SimilarityHasher};
 
-pub struct EngineStarter {
+pub struct EngineStarter<T: CatapultEvictingStructure> {
     hasher: SimilarityHasher,
-    cached_starters: RwLock<HashMap<u64, Vec<usize>>>,
-    max_len: usize,
+    starting_node: usize,
+    catapults: Box<[RwLock<T>]>,
 }
 
-impl EngineStarter {
-    pub fn new(num_hash: usize, plane_dim: usize, graph_size: usize, seed: Option<u64>) -> Self {
-        let hasher = if let Some(seed) = seed {
-            SimilarityHasher::new_seeded(num_hash, plane_dim, seed)
-        } else {
-            SimilarityHasher::new(num_hash, plane_dim)
-        };
+pub struct StartingPoints {
+    pub signature: usize,
+    pub start_points: Vec<usize>,
+}
+
+impl<T> EngineStarter<T>
+where
+    T: CatapultEvictingStructure,
+{
+    pub fn new(num_hash: usize, plane_dim: usize, starting_node: usize, seed: u64) -> Self {
+        let hasher = SimilarityHasher::new_seeded(num_hash, plane_dim, seed);
+
+        let amount_of_catapult_sets = 1 << num_hash;
+        let mut catapult_vecs = Vec::with_capacity(amount_of_catapult_sets);
+        for _ in 0..amount_of_catapult_sets {
+            catapult_vecs.push(RwLock::new(T::new()));
+        }
 
         Self {
             hasher,
-            cached_starters: RwLock::new(HashMap::new()),
-            max_len: graph_size,
+            starting_node,
+            catapults: catapult_vecs.into_boxed_slice(),
         }
     }
 
-    pub fn select_starting_points(&self, query: &[AlignedBlock], k: usize) -> Vec<usize> {
+    pub fn select_starting_points(&self, query: &[AlignedBlock]) -> StartingPoints {
         let signature = self.hasher.hash_int(query);
-        if let Some(starters) = self.cached_starters.read().unwrap().get(&signature) {
-            starters.clone()
-        } else {
-            let seed = signature;
-            // seeding the rand with the signature. This prevents a scheduling shenanigan where having two
-            // threads trying to set this without seeding would make the starter points inconsistent across runs,
-            // technically a race condition (benign).
-            let mut rng = StdRng::seed_from_u64(seed);
-            let indices = sample(&mut rng, self.max_len, k).into_vec();
-            self.cached_starters
-                .write()
-                .unwrap()
-                .insert(signature, indices.clone());
-            indices
+        let mut catapults = self.catapults[signature].read().unwrap().to_vec();
+        catapults.push(self.starting_node);
+        StartingPoints {
+            signature,
+            start_points: catapults,
         }
+    }
+
+    pub fn insert_catapult(&self, signature: usize, new_cata: usize) {
+        self.catapults[signature].write().unwrap().insert(new_cata);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::numerics::SIMD_LANECOUNT;
+    use crate::{numerics::SIMD_LANECOUNT, sets::catapults::FifoSet};
+
+    type TestEngineStarter = EngineStarter<FifoSet<30>>;
 
     fn create_test_query(value: f32) -> Vec<AlignedBlock> {
         vec![AlignedBlock::new([value; SIMD_LANECOUNT])]
@@ -56,159 +62,177 @@ mod tests {
 
     #[test]
     fn test_new_with_seed() {
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
-        assert_eq!(starter.max_len, 1000);
-        assert_eq!(starter.cached_starters.read().unwrap().len(), 0);
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        assert_eq!(starter.starting_node, 1000);
+        assert_eq!(starter.catapults.len(), 1 << 8); // 2^8 = 256
     }
 
     #[test]
-    fn test_new_without_seed() {
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, 500, None);
-        assert_eq!(starter.max_len, 500);
-        assert_eq!(starter.cached_starters.read().unwrap().len(), 0);
+    fn test_new_creates_correct_catapult_count() {
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 500, 123);
+        assert_eq!(starter.starting_node, 500);
+        assert_eq!(starter.catapults.len(), 1 << 8); // 2^8 = 256
     }
 
     #[test]
-    fn test_select_starting_points_returns_correct_count() {
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
+    fn test_select_starting_points_includes_starting_node() {
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
         let query = create_test_query(1.0);
 
-        let points = starter.select_starting_points(&query, 10);
+        let result = starter.select_starting_points(&query);
 
-        assert_eq!(points.len(), 10);
+        // Should always include the starting_node
+        assert!(result.start_points.contains(&1000));
+        assert!(result.start_points.len() >= 1);
     }
 
     #[test]
-    fn test_select_starting_points_within_bounds() {
-        let graph_size = 500;
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, graph_size, Some(42));
+    fn test_insert_and_retrieve_catapult() {
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
         let query = create_test_query(1.0);
 
-        let points = starter.select_starting_points(&query, 50);
+        let result = starter.select_starting_points(&query);
+        let signature = result.signature;
 
-        // All indices should be within [0, graph_size)
-        for &idx in &points {
-            assert!(idx < graph_size, "Index {idx} out of bounds");
+        // Insert a catapult for this signature
+        starter.insert_catapult(signature, 42);
+
+        // Retrieve again and verify the catapult is included
+        let result2 = starter.select_starting_points(&query);
+        assert!(result2.start_points.contains(&42));
+        assert!(result2.start_points.contains(&1000)); // starting_node still there
+    }
+
+    #[test]
+    fn test_catapult_persists_across_queries() {
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let query = create_test_query(1.0);
+
+        let result = starter.select_starting_points(&query);
+        starter.insert_catapult(result.signature, 99);
+
+        // Query again multiple times
+        for _ in 0..3 {
+            let result_again = starter.select_starting_points(&query);
+            assert!(result_again.start_points.contains(&99));
         }
     }
 
     #[test]
-    fn test_select_starting_points_unique_indices() {
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
+    fn test_same_query_returns_consistent_signature() {
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
         let query = create_test_query(1.0);
 
-        let points = starter.select_starting_points(&query, 20);
+        let result1 = starter.select_starting_points(&query);
+        let result2 = starter.select_starting_points(&query);
 
-        // All indices should be unique
-        let mut sorted_points = points.clone();
-        sorted_points.sort_unstable();
-        sorted_points.dedup();
-        assert_eq!(sorted_points.len(), points.len());
+        // Same query should return same signature
+        assert_eq!(result1.signature, result2.signature);
+        assert_eq!(result1.start_points, result2.start_points);
     }
 
     #[test]
-    fn test_caching_same_query() {
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
-        let query = create_test_query(1.0);
-
-        let points1 = starter.select_starting_points(&query, 10);
-        let points2 = starter.select_starting_points(&query, 10);
-
-        // Same query should return same cached results
-        assert_eq!(points1, points2);
-
-        // Cache should have one entry
-        assert_eq!(starter.cached_starters.read().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn test_different_queries_different_results() {
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
+    fn test_different_queries_different_signatures() {
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
         let query1 = create_test_query(1.0);
         let query2 = create_test_query(-1.0);
 
-        let points1 = starter.select_starting_points(&query1, 10);
-        let points2 = starter.select_starting_points(&query2, 10);
+        let result1 = starter.select_starting_points(&query1);
+        let result2 = starter.select_starting_points(&query2);
 
-        // Different queries should likely return different results
+        // Different queries should likely return different signatures
         // (Not guaranteed but highly probable with good hashing)
-        assert_ne!(points1, points2);
-
-        // Cache should have two entries
-        assert_eq!(starter.cached_starters.read().unwrap().len(), 2);
+        assert_ne!(result1.signature, result2.signature);
     }
-
     #[test]
     fn test_determinism_with_seed() {
-        let starter1 = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
-        let starter2 = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
+        let starter1 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter2 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
         let query = create_test_query(1.5);
 
-        let points1 = starter1.select_starting_points(&query, 15);
-        let points2 = starter2.select_starting_points(&query, 15);
+        let result1 = starter1.select_starting_points(&query);
+        let result2 = starter2.select_starting_points(&query);
 
-        // Same seed and query should give same results
-        assert_eq!(points1, points2);
+        // Same seed and query should give same signature
+        assert_eq!(result1.signature, result2.signature);
     }
 
     #[test]
-    fn test_different_seeds_different_results() {
-        let starter1 = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
-        let starter2 = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(99));
+    fn test_different_seeds_different_signatures() {
+        let starter1 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let starter2 = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 99);
         let query = create_test_query(1.0);
 
-        let points1 = starter1.select_starting_points(&query, 10);
-        let points2 = starter2.select_starting_points(&query, 10);
+        let result1 = starter1.select_starting_points(&query);
+        let result2 = starter2.select_starting_points(&query);
 
-        // Different seeds should give different results for same query
-        assert_ne!(points1, points2);
+        // Different seeds should give different signatures for same query
+        assert_ne!(result1.signature, result2.signature);
     }
 
     #[test]
-    fn test_select_single_starting_point() {
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, 100, Some(42));
+    fn test_multiple_catapults_same_signature() {
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
         let query = create_test_query(1.0);
 
-        let points = starter.select_starting_points(&query, 1);
+        let result = starter.select_starting_points(&query);
+        let signature = result.signature;
 
-        assert_eq!(points.len(), 1);
-        assert!(points[0] < 100);
+        // Insert multiple catapults for the same signature
+        starter.insert_catapult(signature, 100);
+        starter.insert_catapult(signature, 200);
+        starter.insert_catapult(signature, 300);
+
+        let result2 = starter.select_starting_points(&query);
+
+        // All catapults should be present
+        assert!(result2.start_points.contains(&100));
+        assert!(result2.start_points.contains(&200));
+        assert!(result2.start_points.contains(&300));
+        assert!(result2.start_points.contains(&1000));
     }
 
     #[test]
-    fn test_select_all_points() {
-        let graph_size = 50;
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, graph_size, Some(42));
-        let query = create_test_query(1.0);
+    fn test_different_signatures_independent_catapults() {
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
+        let query1 = create_test_query(1.0);
+        let query2 = create_test_query(-1.0);
 
-        let points = starter.select_starting_points(&query, graph_size);
+        let result1 = starter.select_starting_points(&query1);
+        let result2 = starter.select_starting_points(&query2);
 
-        assert_eq!(points.len(), graph_size);
+        // Insert catapults for different signatures
+        starter.insert_catapult(result1.signature, 111);
+        starter.insert_catapult(result2.signature, 222);
 
-        // Should be all indices from 0 to graph_size-1
-        let mut sorted_points = points.clone();
-        sorted_points.sort_unstable();
-        assert_eq!(sorted_points, (0..graph_size).collect::<Vec<_>>());
+        let result1_again = starter.select_starting_points(&query1);
+        let result2_again = starter.select_starting_points(&query2);
+
+        // Each signature should only have its own catapults
+        assert!(result1_again.start_points.contains(&111));
+        assert!(!result1_again.start_points.contains(&222));
+
+        assert!(result2_again.start_points.contains(&222));
+        assert!(!result2_again.start_points.contains(&111));
     }
 
     #[test]
-    fn test_multiple_queries_build_cache() {
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
+    fn test_signature_within_bounds() {
+        let num_hash = 8;
+        let starter = TestEngineStarter::new(num_hash, SIMD_LANECOUNT, 1000, 42);
 
-        for i in 0..5 {
+        for i in 0..10 {
             let query = create_test_query(i as f32);
-            starter.select_starting_points(&query, 10);
-        }
+            let result = starter.select_starting_points(&query);
 
-        // Cache should have 5 entries (or fewer if there were hash collisions)
-        let cache_size = starter.cached_starters.read().unwrap().len();
-        assert!(cache_size <= 5);
-        assert!(cache_size > 0);
+            // Signature should be within bounds of catapult array
+            assert!(result.signature < (1 << num_hash));
+        }
     }
 
     #[test]
     fn test_multidimensional_query() {
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT * 4, 1000, Some(42));
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT * 4, 1000, 42);
         let query = vec![
             AlignedBlock::new([1.0; SIMD_LANECOUNT]),
             AlignedBlock::new([2.0; SIMD_LANECOUNT]),
@@ -216,56 +240,73 @@ mod tests {
             AlignedBlock::new([4.0; SIMD_LANECOUNT]),
         ];
 
-        let points = starter.select_starting_points(&query, 20);
+        let result = starter.select_starting_points(&query);
 
-        assert_eq!(points.len(), 20);
-        for &idx in &points {
-            assert!(idx < 1000);
-        }
+        // Should return valid signature and include starting_node
+        assert!(result.signature < (1 << 8));
+        assert!(result.start_points.contains(&1000));
     }
 
     #[test]
     fn test_consistency_across_multiple_calls() {
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, 1000, Some(42));
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
         let query = create_test_query(3.0);
 
-        let points1 = starter.select_starting_points(&query, 15);
-        let points2 = starter.select_starting_points(&query, 15);
-        let points3 = starter.select_starting_points(&query, 15);
+        let result1 = starter.select_starting_points(&query);
+        let result2 = starter.select_starting_points(&query);
+        let result3 = starter.select_starting_points(&query);
 
-        assert_eq!(points1, points2);
-        assert_eq!(points2, points3);
+        assert_eq!(result1.signature, result2.signature);
+        assert_eq!(result2.signature, result3.signature);
+        assert_eq!(result1.start_points, result2.start_points);
+        assert_eq!(result2.start_points, result3.start_points);
     }
 
     #[test]
-    fn test_large_k_value() {
-        let graph_size = 10000;
-        let k = 500;
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, graph_size, Some(42));
+    fn test_fifo_eviction_behavior() {
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 1000, 42);
         let query = create_test_query(1.0);
 
-        let points = starter.select_starting_points(&query, k);
+        let result = starter.select_starting_points(&query);
+        let signature = result.signature;
 
-        assert_eq!(points.len(), k);
-
-        // Verify all unique
-        let mut sorted = points.clone();
-        sorted.sort_unstable();
-        sorted.dedup();
-        assert_eq!(sorted.len(), k);
-    }
-
-    #[test]
-    fn test_small_graph() {
-        let graph_size = 10;
-        let starter = EngineStarter::new(8, SIMD_LANECOUNT, graph_size, Some(42));
-        let query = create_test_query(1.0);
-
-        let points = starter.select_starting_points(&query, 5);
-
-        assert_eq!(points.len(), 5);
-        for &idx in &points {
-            assert!(idx < graph_size);
+        // Insert more than FifoSet capacity (30 items)
+        for i in 0..35 {
+            starter.insert_catapult(signature, i);
         }
+
+        let result2 = starter.select_starting_points(&query);
+
+        // Should have at most 30 catapults + 1 starting_node
+        assert!(result2.start_points.len() <= 31);
+
+        // Starting node should always be present
+        assert!(result2.start_points.contains(&1000));
+
+        // Oldest entries should be evicted (0-4 should be gone)
+        assert!(!result2.start_points.contains(&0));
+        assert!(!result2.start_points.contains(&1));
+        assert!(!result2.start_points.contains(&2));
+        assert!(!result2.start_points.contains(&3));
+        assert!(!result2.start_points.contains(&4));
+
+        // Newest entries should be present (30-34)
+        assert!(result2.start_points.contains(&30));
+        assert!(result2.start_points.contains(&31));
+        assert!(result2.start_points.contains(&32));
+        assert!(result2.start_points.contains(&33));
+        assert!(result2.start_points.contains(&34));
+    }
+
+    #[test]
+    fn test_empty_catapult_only_returns_starting_node() {
+        let starter = TestEngineStarter::new(8, SIMD_LANECOUNT, 999, 42);
+        let query = create_test_query(5.5);
+
+        let result = starter.select_starting_points(&query);
+
+        // With no catapults inserted, should only return the starting_node
+        assert_eq!(result.start_points.len(), 1);
+        assert_eq!(result.start_points[0], 999);
     }
 }
