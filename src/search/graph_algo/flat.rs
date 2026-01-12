@@ -17,6 +17,14 @@ impl FlatCatapultChoice {
     pub fn local_enabled(self) -> bool {
         self == FlatCatapultChoice::CatapultsEnabled
     }
+
+    pub fn from_bool(enabled: bool) -> Self {
+        if enabled {
+            FlatCatapultChoice::CatapultsEnabled
+        } else {
+            FlatCatapultChoice::CatapultsDisabled
+        }
+    }
 }
 
 impl GraphSearchAlgorithm for FlatSearch {

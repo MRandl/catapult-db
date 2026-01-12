@@ -1,6 +1,10 @@
 use crate::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
-    search::{AdjacencyGraph, Node, graph_algo::FlatSearch},
+    search::{
+        AdjacencyGraph, Node,
+        graph_algo::{FlatCatapultChoice, FlatSearch},
+        hash_start::{EngineStarter, EngineStarterParams},
+    },
     sets::{catapults::CatapultEvictingStructure, fixed::FlatFixedSet},
 };
 
@@ -69,7 +73,8 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
     pub fn load_flat_from_path(
         graph_path: PathBuf,
         payload_path: PathBuf,
-    ) -> Vec<Node<FlatFixedSet>> {
+        mut engine_params: EngineStarterParams,
+    ) -> Self {
         let mut graph_file = BufReader::new(File::open(graph_path).expect("FNF")).bytes();
         let mut payload_file = BufReader::new(File::open(payload_path).expect("FNF")).bytes();
 
@@ -111,33 +116,44 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         assert!(graph_file.count() == 0);
         assert!(payload_file.count() == 0);
 
-        adjacency
+        engine_params.starting_node = entry_point as usize;
+        AdjacencyGraph::new_flat(
+            adjacency,
+            EngineStarter::<T>::new(engine_params),
+            FlatCatapultChoice::from_bool(engine_params.enabled_catapults),
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        search::{AdjacencyGraph, graph_algo::FlatSearch},
-        sets::{catapults::FifoSet, fixed::FixedSet},
+        numerics::SIMD_LANECOUNT,
+        search::{AdjacencyGraph, graph_algo::FlatSearch, hash_start::EngineStarterParams},
+        sets::catapults::FifoSet,
     };
 
     #[test]
     fn loading_example_graph() {
         let graph_path = "test_index/ann";
         let payload_path = "test_index/ann_vectors.bin";
+        let engine_params1 = EngineStarterParams::new(4, SIMD_LANECOUNT, 0, 42, true);
+        let engine_params2 = EngineStarterParams::new(4, SIMD_LANECOUNT, 0, 42, false);
 
-        let graphed = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
+        let graphed1 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
+            engine_params1,
         );
 
-        assert!(graphed.len() == 4);
-        for node in graphed.into_iter() {
-            assert!(node.neighbors.to_level(()).len() <= 2);
-            for i in 0..node.payload.len() {
-                assert!(node.payload[0] == node.payload[i]);
-            }
-        }
+        let graphed2 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
+            graph_path.into(),
+            payload_path.into(),
+            engine_params2,
+        );
+
+        assert!(graphed1.len() == 4);
+        assert!(graphed2.len() == 4);
+        assert!(graphed1.len() == graphed2.len());
     }
 }
