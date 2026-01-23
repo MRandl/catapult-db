@@ -3,6 +3,7 @@ pub struct Stats {
     nodes_visited: usize,
     dists_computed: usize,
     searches_with_catapults: usize,
+    work_avoided: usize,
 }
 
 impl Stats {
@@ -12,6 +13,7 @@ impl Stats {
             nodes_visited: 0,
             dists_computed: 0,
             searches_with_catapults: 0,
+            work_avoided: 0,
         }
     }
 
@@ -50,12 +52,21 @@ impl Stats {
         self.searches_with_catapults
     }
 
+    pub fn bump_work_avoided(&mut self, amt: usize) {
+        self.work_avoided += amt;
+    }
+
+    pub fn get_work_avoided(&self) -> usize {
+        self.work_avoided
+    }
+
     pub fn merge(&self, othr: &Self) -> Self {
         Self {
             beam_calls: self.beam_calls + othr.beam_calls,
             nodes_visited: self.nodes_visited + othr.nodes_visited,
             dists_computed: self.dists_computed + othr.dists_computed,
             searches_with_catapults: self.searches_with_catapults + othr.searches_with_catapults,
+            work_avoided: self.work_avoided + othr.work_avoided,
         }
     }
 }

@@ -9,8 +9,9 @@ use crate::{
         candidates::{CandidateEntry, SmallestKCandidates},
         catapults::CatapultEvictingStructure,
         fixed::{FixedSet, FlatFixedSet},
-        visited::{CompressedBitset, VisitorSet},
+        visited::IntegerSet,
     },
+    statistics::Stats,
 };
 
 /// In-memory adjacency graph used for approximate nearest-neighbor (ANN) search.
@@ -61,7 +62,10 @@ where
         indices: &[usize],
         query: &[AlignedBlock],
         catapult_marker: bool,
+        stats: &mut Stats,
     ) -> Vec<CandidateEntry> {
+        stats.bump_computed_dists(indices.len());
+
         indices
             .iter()
             .map(|&index| {
@@ -108,13 +112,13 @@ where
         k: usize,
         beam_width: usize,
         level: <SearchAlgo::FixedSetType as FixedSet>::LevelContext,
-        stats: &mut crate::statistics::Stats,
+        stats: &mut Stats,
     ) -> Vec<CandidateEntry> {
         assert!(beam_width >= k);
         stats.bump_beam_calls();
 
         let mut candidates: SmallestKCandidates = SmallestKCandidates::new(beam_width);
-        let mut visited = CompressedBitset::new();
+        let mut visited = IntegerSet::default();
 
         candidates.insert_batch(starting_candidates);
 
@@ -133,23 +137,25 @@ where
             // All of these guys become candidates for expansion. if we have too many candidates
             // (beam width parameter), the `candidates` data structure takes care of removing the
             // worst ones (and the duplicates).
-            let neighbors = &best_candidate_neighs.to_level(level);
+            let neighbors = best_candidate_neighs.to_level(level);
+
             let neighbor_distances = self.distances_from_indices(
-                neighbors,
+                &neighbors,
                 query,
                 best_candidate_node.has_catapult_ancestor,
+                stats,
             );
-            stats.bump_computed_dists(neighbors.len());
+
             candidates.insert_batch(&neighbor_distances);
 
             // mark our current node as visited (not to be expanded again)
-            visited.set(best_candidate_node.index);
+            visited.insert(best_candidate_node.index);
             stats.bump_nodes_visited();
 
             // and find some other guy to expand, if possible. If not, we call it a day and return our best guesses.
             best_candidate = candidates
                 .iter()
-                .filter(|&elem| !visited.get(elem.index))
+                .filter(|&elem| !visited.contains(&elem.index))
                 .min()
                 .copied()
         }
@@ -172,13 +178,13 @@ where
         query: &[AlignedBlock],
         k: usize,
         beam_width: usize,
-        stats: &mut crate::statistics::Stats,
+        stats: &mut Stats,
     ) -> Vec<CandidateEntry> {
         let hash_search = self.starter.select_starting_points(query);
         let signature = hash_search.signature;
         let entry_points = hash_search.start_points;
 
-        let mut distances = self.distances_from_indices(&entry_points, query, true);
+        let mut distances = self.distances_from_indices(&entry_points, query, true, stats);
         let last_index = distances.len() - 1;
         distances[last_index].has_catapult_ancestor = false;
 

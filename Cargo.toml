@@ -31,6 +31,9 @@ strip = false
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+hashbrown = "0.16.1"
 npyz = "0.8.4"
 rand = "0.9.2"
 rand_distr = "0.5.1"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149"}

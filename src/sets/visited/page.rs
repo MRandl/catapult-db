@@ -21,6 +21,10 @@ impl Page {
     pub fn get(&self, offset: usize) -> bool {
         (self.bits[offset / 64] & (1 << (offset % 64))) != 0
     }
+
+    pub fn len(&self) -> usize {
+        self.bits.iter().map(|b| b.count_ones() as usize).sum()
+    }
 }
 
 impl Default for Page {

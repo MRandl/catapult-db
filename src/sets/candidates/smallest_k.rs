@@ -40,8 +40,20 @@ impl SmallestKCandidates {
             // 1. find the insertion point (O(log K))
             let idx = self.sorted_members.partition_point(|m| m < item);
 
-            // 2. duplicate Check (O(1) after binary search)
-            if idx < self.sorted_members.len() && self.sorted_members[idx].index == item.index {
+            // 2. duplicate Check - when distances are equal, we need to check all entries with the same distance
+            // Check if this index already exists anywhere in the array with the same distance
+            let mut is_duplicate = false;
+            let mut check_idx = idx;
+            while check_idx < self.sorted_members.len()
+                && self.sorted_members[check_idx].distance == item.distance
+            {
+                if self.sorted_members[check_idx].index == item.index {
+                    is_duplicate = true;
+                    break;
+                }
+                check_idx += 1;
+            }
+            if is_duplicate {
                 continue;
             }
 

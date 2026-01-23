@@ -15,6 +15,10 @@ impl CompressedBitset {
             pages: IntegerMap::default(),
         }
     }
+
+    pub fn len(&self) -> usize {
+        self.pages.values().map(|p| p.len()).sum()
+    }
 }
 
 impl VisitorSet for CompressedBitset {
