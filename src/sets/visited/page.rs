@@ -22,6 +22,7 @@ impl Page {
         (self.bits[offset / 64] & (1 << (offset % 64))) != 0
     }
 
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.bits.iter().map(|b| b.count_ones() as usize).sum()
     }
@@ -56,6 +57,7 @@ mod tests {
         assert!(page.get(42));
         assert!(!page.get(41));
         assert!(!page.get(43));
+        assert_eq!(page.len(), 1);
     }
 
     #[test]

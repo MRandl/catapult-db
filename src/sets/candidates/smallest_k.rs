@@ -217,7 +217,12 @@ mod tests {
     fn test_duplicate_prevention() {
         let mut sk = SmallestKCandidates::new(5);
         // Insert the same item multiple times
-        sk.insert_batch(&[entry(1.0, 100), entry(1.0, 100), entry(2.0, 200)]);
+        sk.insert_batch(&[
+            entry(1.0, 200),
+            entry(1.0, 100),
+            entry(1.0, 100),
+            entry(1.0, 200),
+        ]);
 
         assert_eq!(sk.sorted_members.len(), 2);
     }

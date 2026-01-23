@@ -28,7 +28,6 @@ struct SearchJobResult {
     checksum: Option<usize>,
     avg_dists_computed: f64,
     avg_nodes_visited: f64,
-    work_avoided: f64,
     searches_with_catapults: Option<usize>,
     catapult_usage_pct: Option<f64>,
     avg_catapults_added: Option<f64>,
@@ -153,7 +152,6 @@ fn run_search_job(
 
     let avg_dists_computed = combined_stats.get_computed_dists() as f64 / num_queries as f64;
     let avg_nodes_visited = combined_stats.get_nodes_visited() as f64 / num_queries as f64;
-    let work_avoided = combined_stats.get_work_avoided() as f64 / num_queries as f64;
     let checksum = reses.into_iter().map(|e| e.index).reduce(|a, b| a + b);
 
     let result = if catapults_enabled {
@@ -185,7 +183,6 @@ fn run_search_job(
             elapsed_secs: elapsed.as_secs_f64(),
             qps: total_qps,
             checksum,
-            work_avoided,
             avg_dists_computed,
             avg_nodes_visited,
             searches_with_catapults: Some(combined_stats.get_searches_with_catapults()),
@@ -207,7 +204,6 @@ fn run_search_job(
             elapsed_secs: elapsed.as_secs_f64(),
             qps: total_qps,
             checksum,
-            work_avoided: 0.0,
             avg_dists_computed,
             avg_nodes_visited,
             searches_with_catapults: None,
