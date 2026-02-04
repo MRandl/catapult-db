@@ -1,3 +1,5 @@
+use hashbrown::HashSet;
+
 use crate::{
     numerics::{AlignedBlock, VectorLike},
     search::{
@@ -9,22 +11,32 @@ use crate::{
         candidates::{CandidateEntry, SmallestKCandidates},
         catapults::CatapultEvictingStructure,
         fixed::{FixedSet, FlatFixedSet},
-        visited::IntegerSet,
     },
     statistics::Stats,
 };
 
-/// In-memory adjacency graph used for approximate nearest-neighbor (ANN) search.
+/// An in-memory proximity graph for approximate nearest neighbor (ANN) search.
+///
+/// This structure stores a graph where each node contains a vector embedding (payload)
+/// and its neighbor connections. The graph supports beam search with optional catapult
+/// acceleration, using LSH to map queries to cached starting points from previous searches.
+///
+/// # Type Parameters
+/// * `EvictPolicy` - The eviction strategy for catapult storage (e.g., `FifoSet<30>`)
+/// * `Algo` - The graph search algorithm type (e.g., `FlatSearch` for single-layer graphs)
 ///
 /// # Invariants
-/// - `adjacency[i]` represents node `i`.
-/// - Each `Node.neighbors` entry is a valid index into `adjacency`.
-/// - `Node.payload` implements `VectorLike` and supports `l2_squared(&[f32])`.
+/// - `adjacency[i]` represents node `i` in the graph
+/// - Each `Node.neighbors` entry is a valid index into `adjacency`
+/// - All node payloads have the same dimensionality
 ///
-/// # Algorithms
-/// - [`beam_search`] implements a *best-first beam search*: it keeps only the
-///   `beam_width` closest candidates seen so far and repeatedly expands the best
-///   not-yet-visited candidate until no such candidate remains.
+/// # Core Algorithm
+/// The main search method [`beam_search`](Self::beam_search) implements best-first beam search:
+/// 1. Maps query to LSH signature and retrieves cached catapults
+/// 2. Maintains a candidate set of at most `beam_width` closest nodes
+/// 3. Repeatedly expands the best unvisited candidate, adding its neighbors
+/// 4. Stops when all candidates in the beam have been visited
+/// 5. Caches the best result as a catapult for future similar queries
 pub struct AdjacencyGraph<EvictPolicy, Algo>
 where
     EvictPolicy: CatapultEvictingStructure,
@@ -39,6 +51,15 @@ impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
 where
     EvictPolicy: CatapultEvictingStructure,
 {
+    /// Creates a new flat (single-layer) adjacency graph for ANN search.
+    ///
+    /// # Arguments
+    /// * `adj` - Vector of nodes representing the graph, where `adj[i]` is node `i`
+    /// * `engine` - LSH-based starting point selector managing catapult buckets
+    /// * `catapults` - Configuration for whether catapults are enabled
+    ///
+    /// # Returns
+    /// A new `AdjacencyGraph` instance ready for beam search
     pub fn new_flat(
         adj: Vec<Node<FlatFixedSet>>,
         engine: EngineStarter<EvictPolicy>,
@@ -57,6 +78,19 @@ where
     EvictPolicy: CatapultEvictingStructure,
     SearchAlgo: GraphSearchAlgorithm,
 {
+    /// Computes distances from the query to a set of node indices.
+    ///
+    /// Creates candidate entries for each provided index by computing the squared L2
+    /// distance from the query to that node's payload.
+    ///
+    /// # Arguments
+    /// * `indices` - Node indices to compute distances for
+    /// * `query` - Query vector as aligned blocks
+    /// * `catapult_marker` - Whether to mark these candidates as catapult-derived
+    /// * `stats` - Statistics tracker to update with distance computations
+    ///
+    /// # Returns
+    /// A vector of candidate entries with computed distances
     fn distances_from_indices(
         &self,
         indices: &[usize],
@@ -81,30 +115,37 @@ where
             .collect()
     }
 
-    /// Performs a best-first beam search from an LSH-selected set of entry points.
+    /// Performs a best-first beam search starting from the given candidates.
     ///
-    /// The method maintains a candidate set of size at most `beam_width`
-    /// containing the closest seen nodes (by L2). At each step it
-    /// expands the closest not-yet-visited node from that set, inserts all of
-    /// its neighbors into the candidate set (subject to the beam capacity),
-    /// marks the expanded node visited, and repeats until no unvisited
-    /// candidates remain.
+    /// This is the core search algorithm that maintains a beam of at most `beam_width`
+    /// candidates and iteratively expands the closest unvisited candidate until exhaustion.
+    /// The search explores the graph by following neighbor edges, maintaining the k-best
+    /// nodes encountered.
     ///
+    /// # Algorithm Steps
+    /// 1. Initialize candidate beam with starting points
+    /// 2. Find the best unvisited candidate in the beam
+    /// 3. Expand it by computing distances to all its neighbors
+    /// 4. Add neighbors to the beam (with automatic eviction if over capacity)
+    /// 5. Mark the expanded node as visited
+    /// 6. Repeat from step 2 until no unvisited candidates remain
+    /// 7. Return the top-k candidates by distance
     ///
-    /// # Parameters
-    /// - `query`: Target vector.
-    /// - `k`: Number of final nearest neighbors desired. **Note:** currently only
-    ///   used for the assertion `beam_width >= k` (see "Issues" below).
-    /// - `beam_width`: Maximum size of the maintained candidate set.
-    /// - `level`: The HNSW layer to use, if any. Should be None for non-HNSW searches.
+    /// # Arguments
+    /// * `query` - Target query vector as aligned blocks
+    /// * `starting_candidates` - Initial candidates to seed the search
+    /// * `k` - Number of nearest neighbors to return
+    /// * `beam_width` - Maximum number of candidates to maintain (must be ≥ k)
+    /// * `level` - Level/layer context for neighbor retrieval (unit type for flat graphs)
+    /// * `stats` - Statistics tracker for performance monitoring
     ///
     /// # Returns
-    /// The `k` indices (and their corresponding distances) that are closest
-    /// to the given query according to the approximate beam-search algorithm
+    /// A vector of the k nearest candidate entries, sorted by distance
     ///
     /// # Panics
-    /// - If `beam_width < k`.
-    /// - If neighbor indices are out of bounds (violates the graph invariant).
+    /// * Panics if `beam_width < k`
+    /// * Panics if starting_candidates is empty
+    /// * Panics if neighbor indices are out of bounds (graph invariant violation)
     fn beam_search_raw(
         &self,
         query: &[AlignedBlock],
@@ -118,7 +159,7 @@ where
         stats.bump_beam_calls();
 
         let mut candidates: SmallestKCandidates = SmallestKCandidates::new(beam_width);
-        let mut visited = IntegerSet::default();
+        let mut visited = HashSet::new();
 
         candidates.insert_batch(starting_candidates);
 
@@ -173,6 +214,27 @@ impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
 where
     EvictPolicy: CatapultEvictingStructure,
 {
+    /// Performs approximate k-nearest neighbor search using LSH-accelerated beam search.
+    ///
+    /// This is the main entry point for querying the graph. It uses LSH to map the query
+    /// to a catapult bucket, retrieves cached starting points from similar previous queries,
+    /// runs beam search, and caches the best result for future queries.
+    ///
+    /// # Arguments
+    /// * `query` - Query vector as aligned blocks
+    /// * `k` - Number of nearest neighbors to return
+    /// * `beam_width` - Maximum beam size during search (must be ≥ k)
+    /// * `stats` - Statistics tracker for performance monitoring
+    ///
+    /// # Returns
+    /// A vector of the k nearest candidate entries, sorted by ascending distance
+    ///
+    /// # Behavior
+    /// 1. Hashes query to LSH signature
+    /// 2. Retrieves catapults from the corresponding bucket + base starting node
+    /// 3. Runs beam search from these starting points
+    /// 4. Caches the best result as a catapult (if catapults enabled)
+    /// 5. Updates statistics with catapult usage
     pub fn beam_search(
         &self,
         query: &[AlignedBlock],
@@ -200,10 +262,18 @@ where
         search_results
     }
 
+    /// Clears all cached catapults from all LSH buckets.
+    ///
+    /// This is useful for benchmarking to measure performance without the benefit
+    /// of cached starting points, or to reset state between different workloads.
     pub fn clear_all_catapults(&self) {
         self.starter.clear_all_catapults();
     }
 
+    /// Returns the number of nodes in the graph.
+    ///
+    /// # Returns
+    /// The total number of nodes stored in the adjacency list
     #[allow(clippy::len_without_is_empty)] // checking the size of the graph is fine, but it is never ever empty
     pub fn len(&self) -> usize {
         self.adjacency.len()

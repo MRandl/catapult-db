@@ -2,8 +2,17 @@ use std::fmt::Debug;
 
 use crate::{numerics::AlignedBlock, sets::fixed::FixedSet};
 
+/// A node in the proximity graph, containing its vector data and neighbor connections.
+///
+/// Each node stores both its connectivity information (neighbors) and the actual
+/// vector embedding (payload) as SIMD-aligned blocks for efficient distance computation.
+/// The neighbor structure may be flat or hierarchical depending on the graph type.
 pub struct Node<FixedSetType: FixedSet + Debug> {
+    /// The immutable set of neighbor node indices, may support multiple levels/layers.
     pub neighbors: FixedSetType,
+
+    /// The vector embedding for this node, stored as SIMD-aligned blocks of f32 values
+    /// for efficient parallel distance computations.
     pub payload: Box<[AlignedBlock]>,
 }
 

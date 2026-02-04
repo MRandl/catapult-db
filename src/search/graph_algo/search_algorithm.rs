@@ -1,8 +1,30 @@
 use crate::sets::{catapults::CatapultEvictingStructure, fixed::FixedSet};
 
+/// A trait defining the components of a graph search algorithm strategy.
+///
+/// This trait abstracts over different graph search approaches (flat vs hierarchical)
+/// by specifying the associated types needed for each strategy: catapult configuration,
+/// starting point selection mechanism, and neighbor set representation.
+///
+/// Implementations include:
+/// - `FlatSearch`: Single-layer proximity graph search (e.g., DiskANN-style)
+/// - Future: HNSW (Hierarchical Navigable Small World) with multi-layer graphs
 pub trait GraphSearchAlgorithm {
+    /// Configuration type controlling catapult behavior for this algorithm.
+    ///
+    /// For flat searches, this is a simple enabled/disabled flag.
+    /// For hierarchical searches, this could control layer-specific catapult strategies.
     type CatapultChoice: Clone + Copy;
+
+    /// The starting point selector type, parameterized by eviction strategy.
+    ///
+    /// Typically an `EngineStarter<T>` that uses LSH to map queries to catapult buckets.
     type StartingPointSelector<T: CatapultEvictingStructure>;
+
+    /// The neighbor set representation type.
+    ///
+    /// For flat graphs, this is `FlatFixedSet`. For hierarchical graphs, this could be
+    /// a multi-level structure supporting layer-specific neighbor access.
     type FixedSetType: FixedSet;
 }
 

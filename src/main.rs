@@ -233,10 +233,10 @@ fn main() {
 
     // Load the queries
     eprintln!("Loading queries...");
-    let queries: Vec<Vec<AlignedBlock>> = Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries)
-        .into_iter()
-        .take(150_000)
-        .collect();
+    let queries: Vec<Vec<AlignedBlock>> = Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries);
+    // .into_iter()
+    // .take(150_000)
+    // .collect();
     let queries = Arc::new(queries);
 
     eprintln!("\nStarting cartesian product sweep:");

@@ -2,11 +2,29 @@ use std::collections::VecDeque;
 
 use crate::sets::catapults::CatapultEvictingStructure;
 
+/// A FIFO (First-In-First-Out) catapult storage structure with deduplication.
+///
+/// Maintains up to `CAPACITY` unique node indices, evicting the oldest entry when
+/// capacity is exceeded. Reinserting an existing element removes its old position
+/// and adds it as the newest entry, maintaining set semantics.
+///
+/// # Type Parameters
+/// * `CAPACITY` - Maximum number of catapult entries to store, must be greater than 0
+///
+/// # Panics
+/// Creating a `FifoSet` with `CAPACITY == 0` will panic
 pub struct FifoSet<const CAPACITY: usize> {
     queue: VecDeque<usize>,
 }
 
 impl<const CAPACITY: usize> FifoSet<CAPACITY> {
+    /// Creates a new empty FIFO set with the specified capacity.
+    ///
+    /// # Returns
+    /// A new empty `FifoSet` instance
+    ///
+    /// # Panics
+    /// Panics if `CAPACITY == 0`
     pub fn new() -> Self {
         assert!(CAPACITY > 0);
         FifoSet {

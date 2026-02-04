@@ -3,6 +3,11 @@ use std::sync::RwLock;
 use crate::sets::catapults::CatapultEvictingStructure;
 use crate::{numerics::AlignedBlock, search::hash_start::hasher::SimilarityHasher};
 
+/// Manages LSH-based catapult storage and starting point selection for graph searches.
+///
+/// Uses locality-sensitive hashing to map query vectors to buckets of cached starting
+/// points (catapults) from previous successful searches. Each bucket is a thread-safe
+/// evicting structure that stores node indices discovered by similar queries.
 pub struct EngineStarter<T: CatapultEvictingStructure> {
     hasher: SimilarityHasher,
     starting_node: usize,
@@ -10,21 +15,46 @@ pub struct EngineStarter<T: CatapultEvictingStructure> {
     enabled_catapults: bool,
 }
 
+/// The result of starting point selection, containing the LSH signature and node indices.
 pub struct StartingPoints {
+    /// The LSH signature (bucket index) for the query
     pub signature: usize,
+
+    /// Node indices to use as starting points, includes catapults and the base starting node
     pub start_points: Vec<usize>,
 }
 
+/// Configuration parameters for creating an `EngineStarter`.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub struct EngineStarterParams {
+    /// Number of LSH hash bits (determines 2^num_hash buckets)
     pub num_hash: usize,
+
+    /// Dimension of input vectors in f32 elements
     pub plane_dim: usize,
+
+    /// Default starting node index to always include
     pub starting_node: usize,
+
+    /// Random seed for deterministic LSH hyperplane generation
     pub seed: u64,
+
+    /// Whether to enable catapult lookups (if false, only returns starting_node)
     pub enabled_catapults: bool,
 }
 
 impl EngineStarterParams {
+    /// Creates a new parameter configuration for an `EngineStarter`.
+    ///
+    /// # Arguments
+    /// * `num_hash` - Number of LSH hash bits (creates 2^num_hash buckets)
+    /// * `plane_dim` - Vector dimension in f32 elements
+    /// * `starting_node` - Default starting node index
+    /// * `seed` - Random seed for LSH hyperplane generation
+    /// * `enabled_catapults` - Whether to enable catapult lookups
+    ///
+    /// # Returns
+    /// A new `EngineStarterParams` instance
     pub fn new(
         num_hash: usize,
         plane_dim: usize,
@@ -46,6 +76,16 @@ impl<T> EngineStarter<T>
 where
     T: CatapultEvictingStructure,
 {
+    /// Creates a new `EngineStarter` with the specified parameters.
+    ///
+    /// Initializes the LSH hasher and creates 2^num_hash empty catapult buckets,
+    /// each protected by an RwLock for thread-safe concurrent access.
+    ///
+    /// # Arguments
+    /// * `params` - Configuration parameters
+    ///
+    /// # Returns
+    /// A new `EngineStarter` instance ready for starting point selection
     pub fn new(params: EngineStarterParams) -> Self {
         let num_hash = params.num_hash;
         let plane_dim = params.plane_dim;
@@ -69,6 +109,17 @@ where
         }
     }
 
+    /// Selects starting points for a query by hashing it to a catapult bucket.
+    ///
+    /// Computes the LSH signature for the query and retrieves cached catapults from
+    /// the corresponding bucket. The base starting node is always included. If catapults
+    /// are disabled, only the starting node is returned.
+    ///
+    /// # Arguments
+    /// * `query` - The query vector as aligned blocks
+    ///
+    /// # Returns
+    /// A `StartingPoints` struct containing the signature and node indices to use
     pub fn select_starting_points(&self, query: &[AlignedBlock]) -> StartingPoints {
         let signature = self.hasher.hash_int(query);
         let catapults = if self.enabled_catapults {
@@ -84,10 +135,22 @@ where
         }
     }
 
+    /// Records a new catapult node for a specific LSH signature bucket.
+    ///
+    /// This is typically called after a successful search to cache the best result
+    /// as a starting point for future queries with the same signature.
+    ///
+    /// # Arguments
+    /// * `signature` - The LSH signature (bucket index) to insert into
+    /// * `new_cata` - The node index to cache as a catapult
     pub fn new_catapult(&self, signature: usize, new_cata: usize) {
         self.catapults[signature].write().unwrap().insert(new_cata);
     }
 
+    /// Clears all cached catapults from all buckets.
+    ///
+    /// This is useful for benchmarking to measure performance without cached starting
+    /// points, or to reset state between different workloads.
     pub fn clear_all_catapults(&self) {
         for catapult_set in self.catapults.iter() {
             catapult_set.write().unwrap().clear();

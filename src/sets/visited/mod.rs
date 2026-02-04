@@ -1,3 +1,9 @@
+//! Visited node tracking structures for graph traversal.
+//!
+//! This module provides data structures for efficiently tracking which nodes have been
+//! visited during graph search operations, preventing redundant expansions and cycles.
+//! Multiple implementations are available with different space-time tradeoffs.
+
 mod hashset;
 mod integer_map;
 mod page;

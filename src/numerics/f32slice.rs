@@ -21,22 +21,19 @@ pub trait VectorLike {
 }
 
 impl VectorLike for [AlignedBlock] {
-    /// # Usage
-    /// Computes the **SQUARED** L2 distance between two vectors:
+    /// Computes the squared L2 (Euclidean) distance between two vectors using SIMD operations.
     ///
-    /// ```text
-    /// L2^2(x, y) = Σ_i (x[i] - y[i]) ** 2
-    /// ```
+    /// Calculates `Σ_i (self[i] - other[i])²` across all aligned blocks in parallel.
+    /// This is more efficient than computing the actual L2 distance when only comparing
+    /// relative distances, since `dist(a,b) < dist(c,d)` ⟺ `dist²(a,b) < dist²(c,d)`.
     ///
-    /// This is typically useful when comparing two distances :
+    /// # Arguments
+    /// * `othr` - The other vector to compute distance to, must have same length as `self`
     ///
-    /// dist(u,v) < dist(w, x) ⇔ dist(u,v) ** 2 < dist(w,x) ** 2
-    ///
-    /// We are usually interested in the left side of the equivalence,
-    /// but the right side is slightly cheaper to compute.
+    /// # Returns
+    /// The squared L2 distance as an f32
     ///
     /// # Panics
-    ///
     /// Panics if the two vectors have different lengths
     #[inline]
     fn l2_squared(&self, othr: &[AlignedBlock]) -> f32 {
@@ -54,18 +51,36 @@ impl VectorLike for [AlignedBlock] {
         intermediate_sum_lanes.reduce_sum() // 8-to-1 sum
     }
 
-    /// # Usage
-    /// Computes the L2 distance between two vectors.
+    /// Computes the L2 (Euclidean) distance between two vectors using SIMD operations.
+    ///
+    /// Calculates `√(Σ_i (self[i] - other[i])²)` by computing the squared distance
+    /// and taking the square root.
+    ///
+    /// # Arguments
+    /// * `other` - The other vector to compute distance to, must have same length as `self`
+    ///
+    /// # Returns
+    /// The L2 distance as an f32
     ///
     /// # Panics
-    ///
-    /// Panics if the two vectors have different lengths or if the length
-    /// is not a multiple of [`SIMD_LANECOUNT`].
+    /// Panics if the two vectors have different lengths
     #[inline]
     fn l2(&self, other: &[AlignedBlock]) -> f32 {
         self.l2_squared(other).sqrt()
     }
 
+    /// Computes the dot product of two vectors using SIMD operations.
+    ///
+    /// Calculates `Σ_i (self[i] * other[i])` across all aligned blocks in parallel.
+    ///
+    /// # Arguments
+    /// * `othr` - The other vector to compute dot product with, must have same length as `self`
+    ///
+    /// # Returns
+    /// The dot product as an f32
+    ///
+    /// # Panics
+    /// Panics if the two vectors have different lengths
     #[inline]
     fn dot(&self, othr: &[AlignedBlock]) -> f32 {
         assert_eq!(self.len(), othr.len());

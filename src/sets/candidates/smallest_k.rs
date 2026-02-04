@@ -2,27 +2,38 @@ use std::vec::IntoIter;
 
 use crate::sets::candidates::CandidateEntry;
 
-/// A bounded structure that keeps the *k unique smallest* CandidateEntry elements seen so far,
-/// implemented using array scans.
+/// A bounded priority queue that maintains the k smallest unique candidate entries.
 ///
-/// # Semantics
-/// - Inserting an element that is already stored in this data structure has no effect.
-/// - Inserting an element that is not already stored can go three ways:
-///   + If the data structure is not full yet (i.e. with *k* unique elements), it stores the new element.
-///   + Otherwise, if the newly inserted element is larger than any currently stored element, it is ignored.
-///   + Otherwise, the maximum is dropped and the new element takes its place
-/// ```
+/// This structure keeps track of the k smallest `CandidateEntry` elements seen so far,
+/// automatically deduplicating by (distance, index) and evicting larger elements when
+/// capacity is exceeded. Elements are maintained in sorted order for efficient access
+/// to the best candidates.
+///
+/// # Insertion Semantics
+/// - Duplicate entries (same distance and index) are ignored
+/// - If not full, new unique entries are inserted in sorted order
+/// - If full and the new entry is smaller than the current maximum, the maximum is evicted
+/// - If full and the new entry is larger than or equal to the maximum, it is ignored
+///
+/// # Time Complexity
+/// - `insert_batch`: O(n log k) where n is batch size and k is capacity
+/// - Deduplication check: O(k) worst case when many entries share the same distance
 pub struct SmallestKCandidates {
     sorted_members: Vec<CandidateEntry>,
     capacity: usize,
 }
 
 impl SmallestKCandidates {
-    /// Creates a new `SmallestKCandidates` that retains at most `capacity` elements.
+    /// Creates a new empty `SmallestKCandidates` with the specified capacity.
+    ///
+    /// # Arguments
+    /// * `capacity` - Maximum number of unique candidates to retain, must be greater than 0
+    ///
+    /// # Returns
+    /// A new empty `SmallestKCandidates` instance
     ///
     /// # Panics
-    /// Panics if `capacity == 0`.
-    ///
+    /// Panics if `capacity == 0`
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0);
         SmallestKCandidates {
@@ -31,8 +42,16 @@ impl SmallestKCandidates {
         }
     }
 
-    /// Inserts a batch of items, maintaining the k smallest unique elements.
-    /// Returns the number of elements that were actually added (not duplicates or rejected).
+    /// Inserts a batch of candidate entries, maintaining the k smallest unique elements.
+    ///
+    /// For each item in the batch, attempts to insert it while maintaining sorted order
+    /// and the capacity constraint. Duplicates (same distance and index) are ignored.
+    ///
+    /// # Arguments
+    /// * `items` - Slice of candidate entries to insert
+    ///
+    /// # Returns
+    /// The number of items actually added (excluding duplicates and rejected entries)
     pub fn insert_batch(&mut self, items: &[CandidateEntry]) -> usize {
         let mut added_count = 0;
 
@@ -75,6 +94,10 @@ impl SmallestKCandidates {
         added_count
     }
 
+    /// Returns an iterator over the candidate entries in sorted order (smallest to largest).
+    ///
+    /// # Returns
+    /// An iterator that yields references to `CandidateEntry` in ascending distance order
     pub fn iter(&self) -> std::slice::Iter<'_, CandidateEntry> {
         self.sorted_members.iter()
     }

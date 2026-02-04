@@ -1,15 +1,45 @@
 use std::fmt::Debug;
 
+/// A trait for immutable neighbor sets that may support hierarchical level access.
+///
+/// This abstraction allows different graph structures (flat vs hierarchical) to expose
+/// their neighbor relationships uniformly. Flat graphs use a unit `LevelContext` type,
+/// while hierarchical graphs (e.g., HNSW) use `usize` to specify layer indices.
 pub trait FixedSet: Debug {
+    /// Context type used to specify which level/layer of neighbors to retrieve.
+    ///
+    /// For flat graphs, this is `()`. For hierarchical graphs like HNSW, this is `usize`
+    /// representing the layer index.
     type LevelContext: Copy + Clone;
-    fn to_level(&self, _at_level: Self::LevelContext) -> Box<[usize]>;
+
+    /// Returns a cloned copy of the neighbor indices at the specified level.
+    ///
+    /// # Arguments
+    /// * `at_level` - The level context to retrieve neighbors from
+    ///
+    /// # Returns
+    /// A boxed slice containing the neighbor node indices for the specified level
+    fn to_level(&self, at_level: Self::LevelContext) -> Box<[usize]>;
 }
 
+/// A flat (non-hierarchical) immutable set of neighbor indices for a graph node.
+///
+/// Stores a single fixed list of neighbor indices that does not vary by level.
+/// This is suitable for single-layer proximity graphs like DiskANN-style structures.
 pub struct FlatFixedSet {
     neighbors: Box<[usize]>,
 }
 
 impl FlatFixedSet {
+    /// Creates a new flat fixed set from a vector of neighbor indices.
+    ///
+    /// The provided indices are converted to an immutable boxed slice.
+    ///
+    /// # Arguments
+    /// * `initial_values` - Vector of node indices representing the neighbors
+    ///
+    /// # Returns
+    /// A new `FlatFixedSet` containing the provided neighbor indices
     pub fn new(initial_values: Vec<usize>) -> Self {
         FlatFixedSet {
             neighbors: initial_values.into_boxed_slice(),

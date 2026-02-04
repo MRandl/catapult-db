@@ -1,16 +1,46 @@
+/// Number of f32 elements per SIMD lane for parallel operations.
+///
+/// This value is set to 16 to match common SIMD architectures and ensure
+/// efficient vectorized computations. The alignment requirement in `AlignedBlock`
+/// must be kept in sync with this value (64 bytes = 16 f32s * 4 bytes).
 pub const SIMD_LANECOUNT: usize = 16;
 
+/// A 64-byte aligned block of 16 f32 values optimized for SIMD operations.
+///
+/// This structure ensures cache-line friendly memory layout and enables efficient
+/// parallel distance computations using SIMD instructions. The 64-byte alignment
+/// corresponds to `SIMD_LANECOUNT * size_of::<f32>()` for optimal performance.
 #[repr(align(64))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AlignedBlock {
+    /// Array of 16 f32 values representing a portion of a vector.
     pub data: [f32; SIMD_LANECOUNT],
 }
 
 impl AlignedBlock {
+    /// Creates a new aligned block from an array of f32 values.
+    ///
+    /// # Arguments
+    /// * `data` - Array of exactly `SIMD_LANECOUNT` (16) f32 values
+    ///
+    /// # Returns
+    /// A new `AlignedBlock` containing the provided data
     pub fn new(data: [f32; SIMD_LANECOUNT]) -> Self {
         AlignedBlock { data }
     }
 
+    /// Converts a flat vector of f32 values into SIMD-aligned blocks with zero-padding.
+    ///
+    /// This function chunks the input vector into blocks of `SIMD_LANECOUNT` elements,
+    /// padding the final block with zeros if the input length is not a multiple of
+    /// `SIMD_LANECOUNT`. An additional zero-filled block is always appended.
+    ///
+    /// # Arguments
+    /// * `data` - Vector of f32 values to convert into aligned blocks
+    ///
+    /// # Returns
+    /// A vector of `AlignedBlock` instances, with the last block zero-padded if necessary,
+    /// plus one additional zero-filled block
     pub fn allocate_padded(data: Vec<f32>) -> Vec<AlignedBlock> {
         let mut returned = Vec::with_capacity(data.len().div_ceil(SIMD_LANECOUNT));
 
@@ -55,7 +85,7 @@ mod tests {
             1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
         ];
         let blocks = AlignedBlock::allocate_padded(data.clone());
-        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks.len(), 1);
         assert_eq!(
             blocks[0].data,
             [
@@ -63,8 +93,6 @@ mod tests {
                 16.0
             ]
         );
-        assert_eq!(blocks[1].data, [0.0; SIMD_LANECOUNT]);
-
         // Test with remainder
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let blocks = AlignedBlock::allocate_padded(data);

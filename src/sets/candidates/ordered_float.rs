@@ -1,5 +1,12 @@
 use std::{cmp::Ordering, hash::Hash, hash::Hasher};
 
+/// A wrapper around f32 that provides total ordering and proper equality semantics.
+///
+/// Standard f32 does not implement `Ord` or `Eq` due to NaN values and signed zeros.
+/// This wrapper uses bit-level comparison to ensure that any floating-point numbers are
+/// compared using a total order, including NaN values and signed zeros.
+///
+/// This enables f32 values to be used in sorted collections and as hash keys.
 #[derive(Debug, Copy, Clone)]
 #[repr(transparent)]
 pub struct TotalF32(pub f32);
