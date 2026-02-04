@@ -5,14 +5,13 @@ use crate::{
 
 /// A marker type for flat (single-layer) graph search algorithms.
 ///
-/// Represents search strategies that operate on a single-layer proximity graph
-/// without hierarchical navigation, similar to DiskANN or NSW (non-hierarchical).
+/// Represents search strategies that operate on a single-layer proximity graph,
+/// similar to DiskANN or NSW.
 pub struct FlatSearch;
 
 /// Configuration for catapult usage in flat graph searches.
 ///
 /// In flat searches, catapults are either globally enabled or disabled.
-/// There are no per-layer or hierarchical catapult strategies.
 #[repr(u8)]
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum FlatCatapultChoice {

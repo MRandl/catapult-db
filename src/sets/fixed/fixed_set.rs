@@ -1,28 +1,18 @@
 use std::fmt::Debug;
 
-/// A trait for immutable neighbor sets that may support hierarchical level access.
+/// A trait for immutable neighbor sets in flat proximity graphs.
 ///
-/// This abstraction allows different graph structures (flat vs hierarchical) to expose
-/// their neighbor relationships uniformly. Flat graphs use a unit `LevelContext` type,
-/// while hierarchical graphs (e.g., HNSW) use `usize` to specify layer indices.
+/// This abstraction provides a uniform interface for accessing neighbor relationships
+/// in graph nodes.
 pub trait FixedSet: Debug {
-    /// Context type used to specify which level/layer of neighbors to retrieve.
-    ///
-    /// For flat graphs, this is `()`. For hierarchical graphs like HNSW, this is `usize`
-    /// representing the layer index.
-    type LevelContext: Copy + Clone;
-
-    /// Returns a cloned copy of the neighbor indices at the specified level.
-    ///
-    /// # Arguments
-    /// * `at_level` - The level context to retrieve neighbors from
+    /// Returns a cloned copy of the neighbor indices.
     ///
     /// # Returns
-    /// A boxed slice containing the neighbor node indices for the specified level
-    fn to_level(&self, at_level: Self::LevelContext) -> Box<[usize]>;
+    /// A boxed slice containing the neighbor node indices
+    fn to_slice(&self) -> Box<[usize]>;
 }
 
-/// A flat (non-hierarchical) immutable set of neighbor indices for a graph node.
+/// An immutable set of neighbor indices for a flat proximity graph node.
 ///
 /// Stores a single fixed list of neighbor indices that does not vary by level.
 /// This is suitable for single-layer proximity graphs like DiskANN-style structures.
@@ -48,35 +38,10 @@ impl FlatFixedSet {
 }
 
 impl FixedSet for FlatFixedSet {
-    type LevelContext = ();
-    fn to_level(&self, _: ()) -> Box<[usize]> {
+    fn to_slice(&self) -> Box<[usize]> {
         self.neighbors.clone()
     }
 }
-
-// #[derive(Debug)]
-// pub struct HierarchicalFixedSet {
-//     neighbors: Box<[Box<[usize]>]>,
-// }
-
-// impl HierarchicalFixedSet {
-//     pub fn new(initial_values: Vec<Vec<usize>>) -> Self {
-//         HierarchicalFixedSet {
-//             neighbors: initial_values
-//                 .into_iter()
-//                 .map(|v| v.into_boxed_slice())
-//                 .collect::<Vec<_>>()
-//                 .into_boxed_slice(),
-//         }
-//     }
-// }
-
-// impl FixedSet for HierarchicalFixedSet {
-//     type LevelContext = usize;
-//     fn to_level(&self, level: usize) -> Box<[usize]> {
-//         self.neighbors.get(level).unwrap().clone()
-//     }
-// }
 
 impl Debug for FlatFixedSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -117,46 +82,46 @@ mod tests {
     }
 
     #[test]
-    fn test_to_box_returns_cloned_neighbors_flat_search() {
+    fn test_neighbors_returns_cloned_data() {
         let values = vec![10, 20, 30];
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
-        let result = fixed_set.to_level(());
+        let result = fixed_set.to_slice();
 
         assert_eq!(result.len(), 3);
         assert_eq!(&*result, &[10, 20, 30]);
     }
 
     #[test]
-    fn test_to_box_returns_cloned_neighbors_hnsw_search() {
+    fn test_neighbors_returns_all_values() {
         let values = vec![100, 200, 300, 400];
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
-        let result = fixed_set.to_level(()); // level 5
+        let result = fixed_set.to_slice();
 
         assert_eq!(result.len(), 4);
         assert_eq!(&*result, &[100, 200, 300, 400]);
     }
 
     #[test]
-    fn test_to_box_with_different_levels_returns_same_data() {
+    fn test_neighbors_consistent_across_calls() {
         let values = vec![1, 2, 3];
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
-        let result_level_0 = fixed_set.to_level(());
-        let result_level_5 = fixed_set.to_level(());
+        let result1 = fixed_set.to_slice();
+        let result2 = fixed_set.to_slice();
 
-        assert_eq!(&*result_level_0, &*result_level_5);
-        assert_eq!(&*result_level_0, &[1, 2, 3]);
+        assert_eq!(&*result1, &*result2);
+        assert_eq!(&*result1, &[1, 2, 3]);
     }
 
     #[test]
-    fn test_to_box_independence() {
+    fn test_neighbors_independence() {
         let values = vec![1, 2, 3];
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
-        let result1 = fixed_set.to_level(());
-        let result2 = fixed_set.to_level(());
+        let result1 = fixed_set.to_slice();
+        let result2 = fixed_set.to_slice();
 
         // Both results should have the same values
         assert_eq!(&*result1, &*result2);
@@ -210,12 +175,12 @@ mod tests {
     }
 
     #[test]
-    fn test_different_graph_search_types() {
+    fn test_multiple_instances_with_same_data() {
         let values = vec![1, 2, 3];
 
-        let flat_set: FlatFixedSet = FlatFixedSet::new(values.clone());
-        let hnsw_set: FlatFixedSet = FlatFixedSet::new(values);
+        let set1: FlatFixedSet = FlatFixedSet::new(values.clone());
+        let set2: FlatFixedSet = FlatFixedSet::new(values);
 
-        assert_eq!(&*flat_set.neighbors, &*hnsw_set.neighbors);
+        assert_eq!(&*set1.neighbors, &*set2.neighbors);
     }
 }

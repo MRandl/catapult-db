@@ -136,7 +136,7 @@ where
     /// * `starting_candidates` - Initial candidates to seed the search
     /// * `k` - Number of nearest neighbors to return
     /// * `beam_width` - Maximum number of candidates to maintain (must be ≥ k)
-    /// * `level` - Level/layer context for neighbor retrieval (unit type for flat graphs)
+    /// * `layer` - layer context for neighbor retrieval (unit type for flat graphs)
     /// * `stats` - Statistics tracker for performance monitoring
     ///
     /// # Returns
@@ -152,7 +152,6 @@ where
         starting_candidates: &[CandidateEntry],
         k: usize,
         beam_width: usize,
-        level: <SearchAlgo::FixedSetType as FixedSet>::LevelContext,
         stats: &mut Stats,
     ) -> Vec<CandidateEntry> {
         assert!(beam_width >= k);
@@ -178,7 +177,7 @@ where
             // All of these guys become candidates for expansion. if we have too many candidates
             // (beam width parameter), the `candidates` data structure takes care of removing the
             // worst ones (and the duplicates).
-            let neighbors = best_candidate_neighs.to_level(level);
+            let neighbors = best_candidate_neighs.to_slice();
 
             let neighbor_distances = self.distances_from_indices(
                 &neighbors,
@@ -250,7 +249,7 @@ where
         let last_index = distances.len() - 1;
         distances[last_index].has_catapult_ancestor = false;
 
-        let search_results = self.beam_search_raw(query, &distances, k, beam_width, (), stats);
+        let search_results = self.beam_search_raw(query, &distances, k, beam_width, stats);
         let best_result = search_results[0].index;
 
         if self.catapults.local_enabled() {
@@ -367,7 +366,7 @@ mod tests {
         let total_edges: usize = graph
             .adjacency
             .iter()
-            .map(|n| n.neighbors.to_level(()).len())
+            .map(|n| n.neighbors.to_slice().len())
             .sum();
         assert_eq!(total_edges, 6);
     }

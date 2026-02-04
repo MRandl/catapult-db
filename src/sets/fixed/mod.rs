@@ -1,8 +1,7 @@
 //! Fixed neighbor set abstractions for graph nodes.
 //!
 //! This module provides trait definitions and implementations for storing immutable
-//! neighbor relationships in graph structures, supporting both flat and hierarchical
-//! graph topologies.
+//! neighbor relationships in flat proximity graph structures.
 
 mod fixed_set;
 
