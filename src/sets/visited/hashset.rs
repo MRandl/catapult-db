@@ -1,3 +1,14 @@
+//! Hash set-based implementation of the `VisitorSet` trait.
+//!
+//! This module provides a `VisitorSet` implementation backed by `IntegerSet` (a hash set
+//! optimized for integer keys). This implementation is best suited for sparse visited sets
+//! where only a small fraction of possible node indices will be marked as visited.
+//!
+//! # Performance Characteristics
+//! - **Space**: O(visited_count) - only stores actually visited nodes
+//! - **Time**: O(1) average case for both `get` and `set` operations
+//! - **Best for**: Sparse graphs or searches that visit relatively few nodes
+
 use crate::sets::visited::{IntegerSet, VisitorSet};
 
 impl VisitorSet for IntegerSet {

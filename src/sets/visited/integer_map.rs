@@ -1,8 +1,22 @@
+//! Hash map and set implementations for integer keys.
+//!
+//! This module provides hash-based collections specialized for integer keys using
+//! an identity hash function. Since integer keys are already well-distributed,
+//! no actual hashing is needed, making operations faster than standard collections.
+
 use std::{
     collections::{HashMap, HashSet},
     hash::{BuildHasherDefault, Hasher},
 };
 
+/// A no-op hasher that treats the input integer as its own hash value.
+///
+/// This hasher is an identity function for `usize` and `u64` types. It
+/// eliminates the overhead of actual hash computation.
+///
+/// # Panics
+/// Panics if `write()` is called with arbitrary bytes instead of using the specialized
+/// `write_usize()` or `write_u64()` methods.
 #[derive(Default)]
 pub struct NoOpHasher {
     hash: u64,
@@ -26,7 +40,16 @@ impl Hasher for NoOpHasher {
     }
 }
 
+/// A `HashMap` specialized for `usize` keys using identity hashing.
+///
+/// This provides better performance than `HashMap<usize, V>` with the default hasher
+/// when keys are already well-distributed (like node indices in a graph).
 pub type IntegerMap<V> = HashMap<usize, V, BuildHasherDefault<NoOpHasher>>;
+
+/// A `HashSet` specialized for `usize` values using identity hashing.
+///
+/// This provides better performance than `HashSet<usize>` with the default hasher
+/// when values are already well-distributed (like node indices in a graph).
 pub type IntegerSet = HashSet<usize, BuildHasherDefault<NoOpHasher>>;
 
 #[cfg(test)]

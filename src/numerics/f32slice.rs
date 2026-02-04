@@ -15,8 +15,31 @@ type SimdF32 = Simd<f32, SIMD_LANECOUNT>;
 ///
 /// - Operations involving two vectors (l2, dot product) require that they have the same length.
 pub trait VectorLike {
+    /// Computes the squared L2 (Euclidean) distance between two vectors.
+    ///
+    /// # Arguments
+    /// * `othr` - The other vector, must have same length
+    ///
+    /// # Returns
+    /// The squared L2 distance
     fn l2_squared(&self, othr: &Self) -> f32;
+
+    /// Computes the L2 (Euclidean) distance between two vectors.
+    ///
+    /// # Arguments
+    /// * `othr` - The other vector, must have same length
+    ///
+    /// # Returns
+    /// The L2 distance
     fn l2(&self, othr: &Self) -> f32;
+
+    /// Computes the dot product of two vectors.
+    ///
+    /// # Arguments
+    /// * `othr` - The other vector, must have same length
+    ///
+    /// # Returns
+    /// The dot product
     fn dot(&self, othr: &Self) -> f32;
 }
 
