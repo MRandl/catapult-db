@@ -39,7 +39,7 @@ impl VectorLike for [AlignedBlock] {
     fn l2_squared(&self, othr: &[AlignedBlock]) -> f32 {
         assert_eq!(self.len(), othr.len());
 
-        let mut intermediate_sum_lanes = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
+        let mut intermediate_sum_lanes = SimdF32::splat(0.0);
 
         for (&slice_self, &slice_othr) in self.iter().zip(othr.iter()) {
             let f32simd_slf = SimdF32::from_array(slice_self.data);
@@ -85,7 +85,7 @@ impl VectorLike for [AlignedBlock] {
     fn dot(&self, othr: &[AlignedBlock]) -> f32 {
         assert_eq!(self.len(), othr.len());
 
-        let mut intermediate_sum_lanes = Simd::<f32, SIMD_LANECOUNT>::splat(0.0);
+        let mut intermediate_sum_lanes = SimdF32::splat(0.0);
 
         for (&slice_self, &slice_othr) in self.iter().zip(othr.iter()) {
             let f32simd_slf = SimdF32::from_array(slice_self.data);
