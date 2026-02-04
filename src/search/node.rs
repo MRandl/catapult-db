@@ -2,10 +2,19 @@ use std::fmt::Debug;
 
 use crate::{numerics::AlignedBlock, sets::fixed::FixedSet};
 
-// The ID of a Node (usize), wrapped in its own struct to avoid accidental misuse.
+/// A type-safe wrapper for node indices in the proximity graph.
+///
+/// # Examples
+/// ```
+/// use catapult::search::NodeId;
+///
+/// let node_id = NodeId { internal: 42 };
+/// assert_eq!(node_id.internal, 42);
+/// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId {
+    /// The underlying node index value
     pub internal: usize,
 }
 

@@ -22,7 +22,7 @@ pub struct UncompressedSet {
 }
 
 impl UncompressedSet {
-    /// Constructs a new [`BitSet`] with space for `capacity` bits,
+    /// Constructs a new `UncompressedSet` with space for `capacity` bits,
     /// all initialized to zero.
     ///
     /// # Examples
