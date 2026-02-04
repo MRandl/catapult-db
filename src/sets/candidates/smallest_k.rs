@@ -2,27 +2,38 @@ use std::vec::IntoIter;
 
 use crate::sets::candidates::CandidateEntry;
 
-/// A bounded structure that keeps the *k unique smallest* CandidateEntry elements seen so far,
-/// implemented using array scans.
+/// A bounded priority queue that maintains the k smallest unique candidate entries.
 ///
-/// # Semantics
-/// - Inserting an element that is already stored in this data structure has no effect.
-/// - Inserting an element that is not already stored can go three ways:
-///   + If the data structure is not full yet (i.e. with *k* unique elements), it stores the new element.
-///   + Otherwise, if the newly inserted element is larger than any currently stored element, it is ignored.
-///   + Otherwise, the maximum is dropped and the new element takes its place
-/// ```
+/// This structure keeps track of the k smallest `CandidateEntry` elements seen so far,
+/// automatically deduplicating by (distance, index) and evicting larger elements when
+/// capacity is exceeded. Elements are maintained in sorted order for efficient access
+/// to the best candidates.
+///
+/// # Insertion Semantics
+/// - Duplicate entries (same distance and index) are ignored
+/// - If not full, new unique entries are inserted in sorted order
+/// - If full and the new entry is smaller than the current maximum, the maximum is evicted
+/// - If full and the new entry is larger than or equal to the maximum, it is ignored
+///
+/// # Time Complexity
+/// - `insert_batch`: O(n log k) where n is batch size and k is capacity
+/// - Deduplication check: O(k) worst case when many entries share the same distance
 pub struct SmallestKCandidates {
     sorted_members: Vec<CandidateEntry>,
     capacity: usize,
 }
 
 impl SmallestKCandidates {
-    /// Creates a new `SmallestKCandidates` that retains at most `capacity` elements.
+    /// Creates a new empty `SmallestKCandidates` with the specified capacity.
+    ///
+    /// # Arguments
+    /// * `capacity` - Maximum number of unique candidates to retain, must be greater than 0
+    ///
+    /// # Returns
+    /// A new empty `SmallestKCandidates` instance
     ///
     /// # Panics
-    /// Panics if `capacity == 0`.
-    ///
+    /// Panics if `capacity == 0`
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0);
         SmallestKCandidates {
@@ -31,8 +42,16 @@ impl SmallestKCandidates {
         }
     }
 
-    /// Inserts a batch of items, maintaining the k smallest unique elements.
-    /// Returns the number of elements that were actually added (not duplicates or rejected).
+    /// Inserts a batch of candidate entries, maintaining the k smallest unique elements.
+    ///
+    /// For each item in the batch, attempts to insert it while maintaining sorted order
+    /// and the capacity constraint. Duplicates (same distance and index) are ignored.
+    ///
+    /// # Arguments
+    /// * `items` - Slice of candidate entries to insert
+    ///
+    /// # Returns
+    /// The number of items actually added (excluding duplicates and rejected entries)
     pub fn insert_batch(&mut self, items: &[CandidateEntry]) -> usize {
         let mut added_count = 0;
 
@@ -75,6 +94,10 @@ impl SmallestKCandidates {
         added_count
     }
 
+    /// Returns an iterator over the candidate entries in sorted order (smallest to largest).
+    ///
+    /// # Returns
+    /// An iterator that yields references to `CandidateEntry` in ascending distance order
     pub fn iter(&self) -> std::slice::Iter<'_, CandidateEntry> {
         self.sorted_members.iter()
     }
@@ -93,6 +116,8 @@ impl IntoIterator for SmallestKCandidates {
 mod tests {
     use rand_distr::num_traits::ToPrimitive;
 
+    use crate::search::NodeId;
+
     use super::*;
 
     fn contents_sorted(sk: &SmallestKCandidates) -> Vec<CandidateEntry> {
@@ -108,7 +133,7 @@ mod tests {
         for x in 1..=10 {
             sk.insert_batch(&[CandidateEntry {
                 distance: x.to_f32().unwrap().into(),
-                index: x,
+                index: NodeId { internal: x },
                 has_catapult_ancestor: false,
             }]);
         }
@@ -116,7 +141,7 @@ mod tests {
         assert_eq!(
             contents_sorted(&sk)
                 .iter()
-                .map(|c| c.index)
+                .map(|c| c.index.internal)
                 .collect::<Vec<_>>(),
             vec![1, 2, 3]
         );
@@ -131,17 +156,17 @@ mod tests {
         let batch_1 = vec![
             CandidateEntry {
                 distance: 10.0.into(),
-                index: 10,
+                index: NodeId { internal: 10 },
                 has_catapult_ancestor: false,
             },
             CandidateEntry {
                 distance: 5.0.into(),
-                index: 5,
+                index: NodeId { internal: 5 },
                 has_catapult_ancestor: false,
             },
             CandidateEntry {
                 distance: 10.0.into(),
-                index: 10,
+                index: NodeId { internal: 10 },
                 has_catapult_ancestor: false,
             }, // Duplicate inside batch
         ];
@@ -149,29 +174,29 @@ mod tests {
 
         // State should be [5, 10]
         assert_eq!(sk.sorted_members.len(), 2);
-        assert_eq!(sk.sorted_members[0].index, 5);
+        assert_eq!(sk.sorted_members[0].index.internal, 5);
 
         // Batch 2: Larger than capacity, contains smaller values,
         // and contains a duplicate of an existing member (5)
         let batch_2 = vec![
             CandidateEntry {
                 distance: 2.0.into(),
-                index: 2,
+                index: NodeId { internal: 2 },
                 has_catapult_ancestor: false,
             }, // New smallest
             CandidateEntry {
                 distance: 5.0.into(),
-                index: 5,
+                index: NodeId { internal: 5 },
                 has_catapult_ancestor: false,
             }, // Duplicate of existing
             CandidateEntry {
                 distance: 7.0.into(),
-                index: 7,
+                index: NodeId { internal: 7 },
                 has_catapult_ancestor: false,
             }, // New middle
             CandidateEntry {
                 distance: 1.0.into(),
-                index: 1,
+                index: NodeId { internal: 1 },
                 has_catapult_ancestor: false,
             }, // New absolute smallest
         ];
@@ -181,7 +206,7 @@ mod tests {
         // 7 and 10 should have been displaced/ignored.
         assert_eq!(sk.sorted_members.len(), 3);
 
-        let results: Vec<usize> = sk.sorted_members.iter().map(|c| c.index).collect();
+        let results: Vec<usize> = sk.sorted_members.iter().map(|c| c.index.internal).collect();
         assert_eq!(results, vec![1, 2, 5]);
     }
 
@@ -195,7 +220,7 @@ mod tests {
     fn entry(dist: f32, idx: usize) -> CandidateEntry {
         CandidateEntry {
             distance: dist.into(),
-            index: idx,
+            index: NodeId { internal: idx },
             has_catapult_ancestor: false,
         }
     }
@@ -208,7 +233,7 @@ mod tests {
             sk.insert_batch(&[entry(i as f32, i)]);
         }
         assert_eq!(sk.sorted_members.len(), 3);
-        let mut results: Vec<_> = sk.into_iter().map(|c| c.index).collect();
+        let mut results: Vec<_> = sk.into_iter().map(|c| c.index.internal).collect();
         results.sort();
         assert_eq!(results, vec![1, 2, 3]);
     }
@@ -251,7 +276,7 @@ mod tests {
         sk.insert_batch(&[entry(50.0, 1), entry(10.0, 2), entry(100.0, 3)]); // Ignore
 
         assert_eq!(sk.sorted_members.len(), 1);
-        assert_eq!(sk.iter().next().unwrap().index, 2);
+        assert_eq!(sk.iter().next().unwrap().index.internal, 2);
     }
 
     #[test]

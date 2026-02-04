@@ -1,6 +1,9 @@
+use hashbrown::HashSet;
+
 use crate::{
     numerics::{AlignedBlock, VectorLike},
     search::{
+        NodeId,
         graph_algo::{FlatCatapultChoice, FlatSearch, GraphSearchAlgorithm},
         hash_start::EngineStarter,
         node::Node,
@@ -9,22 +12,32 @@ use crate::{
         candidates::{CandidateEntry, SmallestKCandidates},
         catapults::CatapultEvictingStructure,
         fixed::{FixedSet, FlatFixedSet},
-        visited::IntegerSet,
     },
     statistics::Stats,
 };
 
-/// In-memory adjacency graph used for approximate nearest-neighbor (ANN) search.
+/// An in-memory proximity graph for approximate nearest neighbor (ANN) search.
+///
+/// This structure stores a graph where each node contains a vector embedding (payload)
+/// and its neighbor connections. The graph supports beam search with optional catapult
+/// acceleration, using LSH to map queries to cached starting points from previous searches.
+///
+/// # Type Parameters
+/// * `EvictPolicy` - The eviction strategy for catapult storage (e.g., `FifoSet<30>`)
+/// * `Algo` - The graph search algorithm type (e.g., `FlatSearch` for single-layer graphs)
 ///
 /// # Invariants
-/// - `adjacency[i]` represents node `i`.
-/// - Each `Node.neighbors` entry is a valid index into `adjacency`.
-/// - `Node.payload` implements `VectorLike` and supports `l2_squared(&[f32])`.
+/// - `adjacency[i]` represents node `i` in the graph
+/// - Each `Node.neighbors` entry is a valid index into `adjacency`
+/// - All node payloads have the same dimensionality
 ///
-/// # Algorithms
-/// - [`beam_search`] implements a *best-first beam search*: it keeps only the
-///   `beam_width` closest candidates seen so far and repeatedly expands the best
-///   not-yet-visited candidate until no such candidate remains.
+/// # Core Algorithm
+/// The main search method [`beam_search`](Self::beam_search) implements best-first beam search:
+/// 1. Maps query to LSH signature and retrieves cached catapults
+/// 2. Maintains a candidate set of at most `beam_width` closest nodes
+/// 3. Repeatedly expands the best unvisited candidate, adding its neighbors
+/// 4. Stops when all candidates in the beam have been visited
+/// 5. Caches the best result as a catapult for future similar queries
 pub struct AdjacencyGraph<EvictPolicy, Algo>
 where
     EvictPolicy: CatapultEvictingStructure,
@@ -39,6 +52,15 @@ impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
 where
     EvictPolicy: CatapultEvictingStructure,
 {
+    /// Creates a new flat (single-layer) adjacency graph for ANN search.
+    ///
+    /// # Arguments
+    /// * `adj` - Vector of nodes representing the graph, where `adj[i]` is node `i`
+    /// * `engine` - LSH-based starting point selector managing catapult buckets
+    /// * `catapults` - Configuration for whether catapults are enabled
+    ///
+    /// # Returns
+    /// A new `AdjacencyGraph` instance ready for beam search
     pub fn new_flat(
         adj: Vec<Node<FlatFixedSet>>,
         engine: EngineStarter<EvictPolicy>,
@@ -57,9 +79,22 @@ where
     EvictPolicy: CatapultEvictingStructure,
     SearchAlgo: GraphSearchAlgorithm,
 {
+    /// Computes distances from the query to a set of node indices.
+    ///
+    /// Creates candidate entries for each provided index by computing the squared L2
+    /// distance from the query to that node's payload.
+    ///
+    /// # Arguments
+    /// * `indices` - Node indices to compute distances for
+    /// * `query` - Query vector as aligned blocks
+    /// * `catapult_marker` - Whether to mark these candidates as catapult-derived
+    /// * `stats` - Statistics tracker to update with distance computations
+    ///
+    /// # Returns
+    /// A vector of candidate entries with computed distances
     fn distances_from_indices(
         &self,
-        indices: &[usize],
+        indices: &[NodeId],
         query: &[AlignedBlock],
         catapult_marker: bool,
         stats: &mut Stats,
@@ -69,7 +104,7 @@ where
         indices
             .iter()
             .map(|&index| {
-                let starting_point = &self.adjacency[index];
+                let starting_point = &self.adjacency[index.internal];
                 let starting_score = starting_point.payload.l2_squared(query);
 
                 CandidateEntry {
@@ -81,44 +116,50 @@ where
             .collect()
     }
 
-    /// Performs a best-first beam search from an LSH-selected set of entry points.
+    /// Performs a best-first beam search starting from the given candidates.
     ///
-    /// The method maintains a candidate set of size at most `beam_width`
-    /// containing the closest seen nodes (by L2). At each step it
-    /// expands the closest not-yet-visited node from that set, inserts all of
-    /// its neighbors into the candidate set (subject to the beam capacity),
-    /// marks the expanded node visited, and repeats until no unvisited
-    /// candidates remain.
+    /// This is the core search algorithm that maintains a beam of at most `beam_width`
+    /// candidates and iteratively expands the closest unvisited candidate until exhaustion.
+    /// The search explores the graph by following neighbor edges, maintaining the k-best
+    /// nodes encountered.
     ///
+    /// # Algorithm Steps
+    /// 1. Initialize candidate beam with starting points
+    /// 2. Find the best unvisited candidate in the beam
+    /// 3. Expand it by computing distances to all its neighbors
+    /// 4. Add neighbors to the beam (with automatic eviction if over capacity)
+    /// 5. Mark the expanded node as visited
+    /// 6. Repeat from step 2 until no unvisited candidates remain
+    /// 7. Return the top-k candidates by distance
     ///
-    /// # Parameters
-    /// - `query`: Target vector.
-    /// - `k`: Number of final nearest neighbors desired. **Note:** currently only
-    ///   used for the assertion `beam_width >= k` (see "Issues" below).
-    /// - `beam_width`: Maximum size of the maintained candidate set.
-    /// - `level`: The HNSW layer to use, if any. Should be None for non-HNSW searches.
+    /// # Arguments
+    /// * `query` - Target query vector as aligned blocks
+    /// * `starting_candidates` - Initial candidates to seed the search
+    /// * `k` - Number of nearest neighbors to return
+    /// * `beam_width` - Maximum number of candidates to maintain (must be ≥ k)
+    /// * `layer` - layer context for neighbor retrieval (unit type for flat graphs)
+    /// * `stats` - Statistics tracker for performance monitoring
     ///
     /// # Returns
-    /// The `k` indices (and their corresponding distances) that are closest
-    /// to the given query according to the approximate beam-search algorithm
+    /// A vector of the k nearest candidate entries, sorted by distance
     ///
     /// # Panics
-    /// - If `beam_width < k`.
-    /// - If neighbor indices are out of bounds (violates the graph invariant).
+    /// * Panics if `beam_width < k`
+    /// * Panics if starting_candidates is empty
+    /// * Panics if neighbor indices are out of bounds (graph invariant violation)
     fn beam_search_raw(
         &self,
         query: &[AlignedBlock],
         starting_candidates: &[CandidateEntry],
         k: usize,
         beam_width: usize,
-        level: <SearchAlgo::FixedSetType as FixedSet>::LevelContext,
         stats: &mut Stats,
     ) -> Vec<CandidateEntry> {
         assert!(beam_width >= k);
         stats.bump_beam_calls();
 
         let mut candidates: SmallestKCandidates = SmallestKCandidates::new(beam_width);
-        let mut visited = IntegerSet::default();
+        let mut visited = HashSet::new();
 
         candidates.insert_batch(starting_candidates);
 
@@ -132,12 +173,13 @@ where
         // while we have some node on which to expand (at first, the best LSH entry point),
         // we keep expanding it (i.e. looking at its neighbors for better guesses)
         while let Some(best_candidate_node) = best_candidate {
-            let best_candidate_neighs = &self.adjacency[best_candidate_node.index].neighbors;
+            let best_candidate_neighs =
+                &self.adjacency[best_candidate_node.index.internal].neighbors;
             // identify the neighbors and catapult landing points of our current best guess.
             // All of these guys become candidates for expansion. if we have too many candidates
             // (beam width parameter), the `candidates` data structure takes care of removing the
             // worst ones (and the duplicates).
-            let neighbors = best_candidate_neighs.to_level(level);
+            let neighbors = best_candidate_neighs.to_slice();
 
             let neighbor_distances = self.distances_from_indices(
                 &neighbors,
@@ -173,6 +215,27 @@ impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
 where
     EvictPolicy: CatapultEvictingStructure,
 {
+    /// Performs approximate k-nearest neighbor search using LSH-accelerated beam search.
+    ///
+    /// This is the main entry point for querying the graph. It uses LSH to map the query
+    /// to a catapult bucket, retrieves cached starting points from similar previous queries,
+    /// runs beam search, and caches the best result for future queries.
+    ///
+    /// # Arguments
+    /// * `query` - Query vector as aligned blocks
+    /// * `k` - Number of nearest neighbors to return
+    /// * `beam_width` - Maximum beam size during search (must be ≥ k)
+    /// * `stats` - Statistics tracker for performance monitoring
+    ///
+    /// # Returns
+    /// A vector of the k nearest candidate entries, sorted by ascending distance
+    ///
+    /// # Behavior
+    /// 1. Hashes query to LSH signature
+    /// 2. Retrieves catapults from the corresponding bucket + base starting node
+    /// 3. Runs beam search from these starting points
+    /// 4. Caches the best result as a catapult (if catapults enabled)
+    /// 5. Updates statistics with catapult usage
     pub fn beam_search(
         &self,
         query: &[AlignedBlock],
@@ -182,13 +245,16 @@ where
     ) -> Vec<CandidateEntry> {
         let hash_search = self.starter.select_starting_points(query);
         let signature = hash_search.signature;
-        let entry_points = hash_search.start_points;
 
-        let mut distances = self.distances_from_indices(&entry_points, query, true, stats);
-        let last_index = distances.len() - 1;
-        distances[last_index].has_catapult_ancestor = false;
+        // Convert catapults to candidate entries (marked as having catapult ancestry)
+        let mut distances = self.distances_from_indices(&hash_search.catapults, query, true, stats);
 
-        let search_results = self.beam_search_raw(query, &distances, k, beam_width, (), stats);
+        // Add the starting node (not a catapult, so marked as false)
+        let starting_node_entry =
+            self.distances_from_indices(&[hash_search.starting_node], query, false, stats);
+        distances.extend(starting_node_entry);
+
+        let search_results = self.beam_search_raw(query, &distances, k, beam_width, stats);
         let best_result = search_results[0].index;
 
         if self.catapults.local_enabled() {
@@ -200,10 +266,18 @@ where
         search_results
     }
 
+    /// Clears all cached catapults from all LSH buckets.
+    ///
+    /// This is useful for benchmarking to measure performance without the benefit
+    /// of cached starting points, or to reset state between different workloads.
     pub fn clear_all_catapults(&self) {
         self.starter.clear_all_catapults();
     }
 
+    /// Returns the number of nodes in the graph.
+    ///
+    /// # Returns
+    /// The total number of nodes stored in the adjacency list
     #[allow(clippy::len_without_is_empty)] // checking the size of the graph is fine, but it is never ever empty
     pub fn len(&self) -> usize {
         self.adjacency.len()
@@ -263,7 +337,13 @@ mod tests {
             FlatCatapultChoice::CatapultsDisabled
         };
         // Start from node 0
-        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, 0, 42, catapults_enabled);
+        let params = EngineStarterParams::new(
+            4,
+            SIMD_LANECOUNT,
+            NodeId { internal: 0 },
+            42,
+            catapults_enabled,
+        );
         AdjacencyGraph::new_flat(nodes, EngineStarter::new(params), catapult_choice)
     }
 
@@ -290,14 +370,14 @@ mod tests {
         // Final candidates (in order of distance): 1 (1), 2 (81), 0 (121)
         // Top K=2 results: [1, 2]
         assert_eq!(results1.len(), k);
-        assert_eq!(results1[0].index, 1);
-        assert_eq!(results1[1].index, 2);
+        assert_eq!(results1[0].index.internal, 1);
+        assert_eq!(results1[1].index.internal, 2);
 
         // Verify the graph structure - count total edges
         let total_edges: usize = graph
             .adjacency
             .iter()
-            .map(|n| n.neighbors.to_level(()).len())
+            .map(|n| n.neighbors.to_slice().len())
             .sum();
         assert_eq!(total_edges, 6);
     }
@@ -367,7 +447,7 @@ mod tests {
             },
         ];
         // Start points: 0, 2
-        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, 0, 42, true);
+        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, true);
         let graph = AdjacencyGraph::new_flat(
             nodes,
             TestEngineStarter::new(params),
@@ -381,8 +461,8 @@ mod tests {
         let results = graph.beam_search(&query, k, beam_width, &mut stats);
         // Top K=2 results: [1, 2]
         assert_eq!(results.len(), k);
-        assert_eq!(results[0].index, 1);
-        assert_eq!(results[1].index, 2);
+        assert_eq!(results[0].index.internal, 1);
+        assert_eq!(results[1].index.internal, 2);
     }
 
     #[test]
@@ -420,7 +500,7 @@ mod tests {
                 neighbors: FlatFixedSet::new(vec![]),
             },
         ];
-        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, 1, 42, true);
+        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, NodeId { internal: 1 }, 42, true);
         let graph = AdjacencyGraph::new_flat(
             nodes,
             TestEngineStarter::new(params),
@@ -435,6 +515,6 @@ mod tests {
 
         // The globally best result (Node 4) must be found and returned.
         assert_eq!(results.len(), k);
-        assert_eq!(results[0].index, 4);
+        assert_eq!(results[0].index.internal, 4);
     }
 }

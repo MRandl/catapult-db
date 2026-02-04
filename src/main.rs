@@ -1,7 +1,7 @@
 use catapult::{
     fs::Queries,
-    numerics::{AlignedBlock, SIMD_LANECOUNT},
-    search::{AdjacencyGraph, graph_algo::FlatSearch, hash_start::EngineStarterParams},
+    numerics::AlignedBlock,
+    search::{AdjacencyGraph, graph_algo::FlatSearch},
     sets::catapults::FifoSet,
     statistics::Stats,
 };
@@ -152,7 +152,10 @@ fn run_search_job(
 
     let avg_dists_computed = combined_stats.get_computed_dists() as f64 / num_queries as f64;
     let avg_nodes_visited = combined_stats.get_nodes_visited() as f64 / num_queries as f64;
-    let checksum = reses.into_iter().map(|e| e.index).reduce(|a, b| a + b);
+    let checksum = reses
+        .into_iter()
+        .map(|e| e.index.internal)
+        .reduce(|a, b| a + b);
 
     let result = if catapults_enabled {
         let catapult_usage_pct = if num_queries > 0 {
@@ -233,10 +236,10 @@ fn main() {
 
     // Load the queries
     eprintln!("Loading queries...");
-    let queries: Vec<Vec<AlignedBlock>> = Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries)
-        .into_iter()
-        .take(150_000)
-        .collect();
+    let queries: Vec<Vec<AlignedBlock>> = Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries);
+    // .into_iter()
+    // .take(150_000)
+    // .collect();
     let queries = Arc::new(queries);
 
     eprintln!("\nStarting cartesian product sweep:");
@@ -257,13 +260,9 @@ fn main() {
             AdjacencyGraph::<FifoSet<30>, FlatSearch>::load_flat_from_path(
                 PathBuf::from_str(&args.graph).unwrap(),
                 PathBuf::from_str(&args.payload).unwrap(),
-                EngineStarterParams {
-                    num_hash: 16,
-                    plane_dim: queries[0].len() * SIMD_LANECOUNT,
-                    starting_node: 0,
-                    seed,
-                    enabled_catapults: args.catapults,
-                },
+                16, // num_hash
+                seed,
+                args.catapults,
             ),
         );
         let graph_size = full_graph.len();

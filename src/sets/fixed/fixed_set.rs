@@ -1,52 +1,52 @@
 use std::fmt::Debug;
 
+use crate::search::NodeId;
+
+/// A trait for immutable neighbor sets in flat proximity graphs.
+///
+/// This abstraction provides a uniform interface for accessing neighbor relationships
+/// in graph nodes.
 pub trait FixedSet: Debug {
-    type LevelContext: Copy + Clone;
-    fn to_level(&self, _at_level: Self::LevelContext) -> Box<[usize]>;
+    /// Returns a cloned copy of the neighbor indices.
+    ///
+    /// # Returns
+    /// A boxed slice containing the neighbor node indices
+    fn to_slice(&self) -> Box<[NodeId]>;
 }
 
+/// An immutable set of neighbor indices for a flat proximity graph node.
+///
+/// Stores a single fixed list of neighbor indices that does not vary by level.
+/// This is suitable for single-layer proximity graphs like DiskANN-style structures.
 pub struct FlatFixedSet {
-    neighbors: Box<[usize]>,
+    neighbors: Box<[NodeId]>,
 }
 
 impl FlatFixedSet {
+    /// Creates a new flat fixed set from a vector of neighbor indices.
+    ///
+    /// The provided indices are converted to an immutable boxed slice.
+    ///
+    /// # Arguments
+    /// * `initial_values` - Vector of node indices representing the neighbors
+    ///
+    /// # Returns
+    /// A new `FlatFixedSet` containing the provided neighbor indices
     pub fn new(initial_values: Vec<usize>) -> Self {
         FlatFixedSet {
-            neighbors: initial_values.into_boxed_slice(),
+            neighbors: initial_values
+                .iter()
+                .map(|&x| NodeId { internal: x })
+                .collect(),
         }
     }
 }
 
 impl FixedSet for FlatFixedSet {
-    type LevelContext = ();
-    fn to_level(&self, _: ()) -> Box<[usize]> {
+    fn to_slice(&self) -> Box<[NodeId]> {
         self.neighbors.clone()
     }
 }
-
-// #[derive(Debug)]
-// pub struct HierarchicalFixedSet {
-//     neighbors: Box<[Box<[usize]>]>,
-// }
-
-// impl HierarchicalFixedSet {
-//     pub fn new(initial_values: Vec<Vec<usize>>) -> Self {
-//         HierarchicalFixedSet {
-//             neighbors: initial_values
-//                 .into_iter()
-//                 .map(|v| v.into_boxed_slice())
-//                 .collect::<Vec<_>>()
-//                 .into_boxed_slice(),
-//         }
-//     }
-// }
-
-// impl FixedSet for HierarchicalFixedSet {
-//     type LevelContext = usize;
-//     fn to_level(&self, level: usize) -> Box<[usize]> {
-//         self.neighbors.get(level).unwrap().clone()
-//     }
-// }
 
 impl Debug for FlatFixedSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -66,7 +66,14 @@ mod tests {
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values.clone());
 
         assert_eq!(fixed_set.neighbors.len(), 5);
-        assert_eq!(&*fixed_set.neighbors, &[1, 2, 3, 4, 5]);
+        assert_eq!(
+            &*fixed_set
+                .neighbors
+                .iter()
+                .map(|x| x.internal)
+                .collect::<Vec<_>>(),
+            &[1, 2, 3, 4, 5]
+        );
     }
 
     #[test]
@@ -83,50 +90,16 @@ mod tests {
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
         assert_eq!(fixed_set.neighbors.len(), 1);
-        assert_eq!(fixed_set.neighbors[0], 42);
+        assert_eq!(fixed_set.neighbors[0], NodeId { internal: 42 });
     }
 
     #[test]
-    fn test_to_box_returns_cloned_neighbors_flat_search() {
-        let values = vec![10, 20, 30];
-        let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
-
-        let result = fixed_set.to_level(());
-
-        assert_eq!(result.len(), 3);
-        assert_eq!(&*result, &[10, 20, 30]);
-    }
-
-    #[test]
-    fn test_to_box_returns_cloned_neighbors_hnsw_search() {
-        let values = vec![100, 200, 300, 400];
-        let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
-
-        let result = fixed_set.to_level(()); // level 5
-
-        assert_eq!(result.len(), 4);
-        assert_eq!(&*result, &[100, 200, 300, 400]);
-    }
-
-    #[test]
-    fn test_to_box_with_different_levels_returns_same_data() {
+    fn test_neighbors_independence() {
         let values = vec![1, 2, 3];
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
-        let result_level_0 = fixed_set.to_level(());
-        let result_level_5 = fixed_set.to_level(());
-
-        assert_eq!(&*result_level_0, &*result_level_5);
-        assert_eq!(&*result_level_0, &[1, 2, 3]);
-    }
-
-    #[test]
-    fn test_to_box_independence() {
-        let values = vec![1, 2, 3];
-        let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
-
-        let result1 = fixed_set.to_level(());
-        let result2 = fixed_set.to_level(());
+        let result1 = fixed_set.to_slice();
+        let result2 = fixed_set.to_slice();
 
         // Both results should have the same values
         assert_eq!(&*result1, &*result2);
@@ -155,8 +128,8 @@ mod tests {
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values.clone());
 
         assert_eq!(fixed_set.neighbors.len(), 10000);
-        assert_eq!(fixed_set.neighbors[0], 0);
-        assert_eq!(fixed_set.neighbors[9999], 9999);
+        assert_eq!(fixed_set.neighbors[0], NodeId { internal: 0 });
+        assert_eq!(fixed_set.neighbors[9999], NodeId { internal: 9999 });
     }
 
     #[test]
@@ -165,7 +138,14 @@ mod tests {
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
         assert_eq!(fixed_set.neighbors.len(), 5);
-        assert_eq!(&*fixed_set.neighbors, &[5, 5, 5, 10, 10]);
+        assert_eq!(
+            &*fixed_set
+                .neighbors
+                .iter()
+                .map(|x| x.internal)
+                .collect::<Vec<_>>(),
+            &[5, 5, 5, 10, 10]
+        );
     }
 
     #[test]
@@ -174,18 +154,28 @@ mod tests {
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
         assert_eq!(fixed_set.neighbors.len(), 3);
-        assert_eq!(fixed_set.neighbors[0], usize::MAX);
-        assert_eq!(fixed_set.neighbors[1], usize::MAX - 1);
-        assert_eq!(fixed_set.neighbors[2], 0);
+        assert_eq!(
+            fixed_set.neighbors[0],
+            NodeId {
+                internal: usize::MAX
+            }
+        );
+        assert_eq!(
+            fixed_set.neighbors[1],
+            NodeId {
+                internal: usize::MAX - 1
+            }
+        );
+        assert_eq!(fixed_set.neighbors[2], NodeId { internal: 0 });
     }
 
     #[test]
-    fn test_different_graph_search_types() {
+    fn test_multiple_instances_with_same_data() {
         let values = vec![1, 2, 3];
 
-        let flat_set: FlatFixedSet = FlatFixedSet::new(values.clone());
-        let hnsw_set: FlatFixedSet = FlatFixedSet::new(values);
+        let set1: FlatFixedSet = FlatFixedSet::new(values.clone());
+        let set2: FlatFixedSet = FlatFixedSet::new(values);
 
-        assert_eq!(&*flat_set.neighbors, &*hnsw_set.neighbors);
+        assert_eq!(&*set1.neighbors, &*set2.neighbors);
     }
 }

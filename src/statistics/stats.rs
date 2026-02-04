@@ -1,11 +1,27 @@
+/// Performance statistics for tracking beam search operations.
+///
+/// Collects metrics about search efficiency including the number of searches performed,
+/// nodes explored, distances computed, and how often catapults provided acceleration.
+/// Statistics can be merged across threads for parallel workloads.
 pub struct Stats {
+    /// Total number of beam search calls performed
     beam_calls: usize,
+
+    /// Total number of nodes expanded during searches
     nodes_visited: usize,
+
+    /// Total number of distance computations performed
     dists_computed: usize,
+
+    /// Number of searches that benefited from at least one catapult starting point
     searches_with_catapults: usize,
 }
 
 impl Stats {
+    /// Creates a new statistics tracker with all counters initialized to zero.
+    ///
+    /// # Returns
+    /// A new `Stats` instance with zeroed counters
     pub fn new() -> Self {
         Stats {
             beam_calls: 0,
@@ -15,41 +31,77 @@ impl Stats {
         }
     }
 
-    /// Record into the statistics object that a new beam search call has been performed
+    /// Increments the beam search call counter by one.
+    ///
+    /// Should be called once per beam search invocation.
     pub fn bump_beam_calls(&mut self) {
         self.beam_calls += 1
     }
 
+    /// Returns the total number of beam searches performed.
+    ///
+    /// # Returns
+    /// The current beam call count
     pub fn get_beam_calls(&self) -> usize {
         self.beam_calls
     }
 
-    // record that the amonut of nodes explored by the beam search
+    /// Increments the visited nodes counter by one.
+    ///
+    /// Should be called each time a node is expanded during beam search.
     pub fn bump_nodes_visited(&mut self) {
         self.nodes_visited += 1;
     }
 
+    /// Returns the total number of nodes visited across all searches.
+    ///
+    /// # Returns
+    /// The current nodes visited count
     pub fn get_nodes_visited(&self) -> usize {
         self.nodes_visited
     }
 
+    /// Increments the distance computation counter.
+    ///
+    /// # Arguments
+    /// * `amt` - The number of distance computations to add
     pub fn bump_computed_dists(&mut self, amt: usize) {
         self.dists_computed += amt;
     }
 
+    /// Returns the total number of distance computations performed.
+    ///
+    /// # Returns
+    /// The current distance computation count
     pub fn get_computed_dists(&self) -> usize {
         self.dists_computed
     }
 
-    /// Record that a search effectively used at least one catapult
+    /// Increments the counter for searches that used catapults.
+    ///
+    /// Should be called once per search that benefited from at least one catapult
+    /// starting point (i.e., a cached result from a similar previous query).
     pub fn bump_searches_with_catapults(&mut self) {
         self.searches_with_catapults += 1;
     }
 
+    /// Returns the number of searches that benefited from catapults.
+    ///
+    /// # Returns
+    /// The current catapult-accelerated search count
     pub fn get_searches_with_catapults(&self) -> usize {
         self.searches_with_catapults
     }
 
+    /// Merges two statistics objects by summing their counters.
+    ///
+    /// This is useful for aggregating statistics from multiple threads or batches.
+    ///
+    /// # Arguments
+    /// * `othr` - The other statistics object to merge with
+    ///
+    /// # Returns
+    /// A new `Stats` instance with summed counters
     pub fn merge(&self, othr: &Self) -> Self {
         Self {
             beam_calls: self.beam_calls + othr.beam_calls,

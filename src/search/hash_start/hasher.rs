@@ -4,15 +4,36 @@ use rand_distr::StandardNormal;
 
 use crate::numerics::{AlignedBlock, SIMD_LANECOUNT, VectorLike};
 
+/// A locality-sensitive hasher using random hyperplane projections.
+///
+/// Maps high-dimensional vectors to binary signatures by projecting them onto
+/// random hyperplanes with Gaussian-distributed normals. Each bit in the signature
+/// indicates which side of a hyperplane the vector lies on (positive or negative).
+/// Similar vectors tend to produce similar signatures, enabling efficient bucketing.
 pub struct SimilarityHasher {
     stored_vectors_dim: usize,
-    /// random hyperplane normals
+    /// Random hyperplane normal vectors, each as a sequence of aligned blocks.
+    /// One hyperplane per hash bit.
     projections: Vec<Vec<AlignedBlock>>,
 }
 
 impl SimilarityHasher {
-    /// Constructs a new hasher with `num_hash` hyperplanes in dimension `dim`,
-    /// seeded from the given `seed`. This is deterministic.
+    /// Creates a new deterministic LSH hasher with random hyperplane projections.
+    ///
+    /// Generates `num_hash` random hyperplanes with Gaussian-distributed normal vectors
+    /// for projecting vectors in the specified dimension. The same seed produces identical
+    /// hyperplanes, ensuring reproducibility.
+    ///
+    /// # Arguments
+    /// * `num_hash` - Number of hash bits / hyperplanes to generate
+    /// * `stored_vectors_dim` - Dimension of input vectors in f32 elements (not blocks)
+    /// * `seed` - Random seed for deterministic hyperplane generation
+    ///
+    /// # Returns
+    /// A new `SimilarityHasher` instance
+    ///
+    /// # Panics
+    /// Panics if `stored_vectors_dim` is not a multiple of `SIMD_LANECOUNT`
     pub fn new_seeded(num_hash: usize, stored_vectors_dim: usize, seed: u64) -> Self {
         let rng = StdRng::seed_from_u64(seed);
 
@@ -42,7 +63,19 @@ impl SimilarityHasher {
         }
     }
 
-    /// Hashes `vector` to a `k`-length binary signature.
+    /// Hashes a vector to a binary signature represented as a vector of booleans.
+    ///
+    /// Each boolean indicates whether the vector's projection onto the corresponding
+    /// hyperplane is non-negative (true) or negative (false).
+    ///
+    /// # Arguments
+    /// * `vector` - The input vector as aligned blocks
+    ///
+    /// # Returns
+    /// A vector of booleans representing the binary hash signature
+    ///
+    /// # Panics
+    /// Panics if the vector dimension doesn't match the hasher's configured dimension
     #[allow(unused)]
     pub fn hash(&self, vector: &[AlignedBlock]) -> Vec<bool> {
         assert!(
@@ -58,13 +91,28 @@ impl SimilarityHasher {
             .collect()
     }
 
+    /// Hashes a vector to an integer signature by packing bits into a usize.
+    ///
+    /// Computes the same LSH signature as `hash()` but returns it as a packed integer
+    /// where each bit represents a hyperplane projection sign. This is more efficient
+    /// for use as an array index or hash table key.
+    ///
+    /// # Arguments
+    /// * `vector` - The input vector as aligned blocks
+    ///
+    /// # Returns
+    /// An integer representing the packed binary hash signature
+    ///
+    /// # Panics
+    /// Panics if the vector dimension doesn't match the hasher's configured dimension,
+    /// or if `num_hash` exceeds the number of bits in a u64
     pub fn hash_int(&self, vector: &[AlignedBlock]) -> usize {
         assert_eq!(
             vector.len(),
             self.stored_vectors_dim / SIMD_LANECOUNT,
             "input vector has wrong dimension"
         );
-        assert!(self.projections.len() <= u64::BITS as usize); // less than 64 planes to fit signature in u64
+        assert!(self.projections.len() <= usize::BITS as usize); // less than 64 planes to fit signature in u64
 
         let mut projected = 0usize;
         for plane in self.projections.iter() {

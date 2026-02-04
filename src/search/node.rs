@@ -2,9 +2,39 @@ use std::fmt::Debug;
 
 use crate::{numerics::AlignedBlock, sets::fixed::FixedSet};
 
+/// A type-safe wrapper for node indices in the proximity graph.
+///
+/// # Examples
+/// ```
+/// use catapult::search::NodeId;
+///
+/// let node_id = NodeId { internal: 42 };
+/// assert_eq!(node_id.internal, 42);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NodeId {
+    /// The underlying node index value
+    pub internal: usize,
+}
+
+/// A node in the proximity graph, containing its vector data and neighbor connections.
+///
+/// Each node stores both its connectivity information (neighbors) and the actual
+/// vector embedding (payload) as SIMD-aligned blocks for efficient distance computation.
 pub struct Node<FixedSetType: FixedSet + Debug> {
+    /// The immutable set of neighbor node indices.
     pub neighbors: FixedSetType,
+
+    /// The vector embedding for this node, stored as SIMD-aligned blocks of f32 values
+    /// for efficient parallel distance computations.
     pub payload: Box<[AlignedBlock]>,
+}
+
+impl Debug for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.internal.fmt(f)
+    }
 }
 
 impl<FixedSetType: FixedSet + Debug> Debug for Node<FixedSetType> {
