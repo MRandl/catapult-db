@@ -1,5 +1,6 @@
 use std::sync::RwLock;
 
+use crate::search::NodeId;
 use crate::sets::catapults::CatapultEvictingStructure;
 use crate::{numerics::AlignedBlock, search::hash_start::hasher::SimilarityHasher};
 
@@ -10,7 +11,7 @@ use crate::{numerics::AlignedBlock, search::hash_start::hasher::SimilarityHasher
 /// evicting structure that stores node indices discovered by similar queries.
 pub struct EngineStarter<T: CatapultEvictingStructure> {
     hasher: SimilarityHasher,
-    starting_node: usize,
+    starting_node: NodeId,
     catapults: Box<[RwLock<T>]>,
     enabled_catapults: bool,
 }
@@ -21,7 +22,7 @@ pub struct StartingPoints {
     pub signature: usize,
 
     /// Node indices to use as starting points, includes catapults and the base starting node
-    pub start_points: Vec<usize>,
+    pub start_points: Vec<NodeId>,
 }
 
 /// Configuration parameters for creating an `EngineStarter`.
@@ -34,7 +35,7 @@ pub struct EngineStarterParams {
     pub plane_dim: usize,
 
     /// Default starting node index to always include
-    pub starting_node: usize,
+    pub starting_node: NodeId,
 
     /// Random seed for deterministic LSH hyperplane generation
     pub seed: u64,
@@ -58,7 +59,7 @@ impl EngineStarterParams {
     pub fn new(
         num_hash: usize,
         plane_dim: usize,
-        starting_node: usize,
+        starting_node: NodeId,
         seed: u64,
         enabled_catapults: bool,
     ) -> Self {
@@ -143,7 +144,7 @@ where
     /// # Arguments
     /// * `signature` - The LSH signature (bucket index) to insert into
     /// * `new_cata` - The node index to cache as a catapult
-    pub fn new_catapult(&self, signature: usize, new_cata: usize) {
+    pub fn new_catapult(&self, signature: usize, new_cata: NodeId) {
         self.catapults[signature].write().unwrap().insert(new_cata);
     }
 
@@ -165,220 +166,229 @@ mod tests {
 
     type TestEngineStarter = EngineStarter<FifoSet<30>>;
 
+    const DEFAULT_NUM_HASH: usize = 8;
+    const DEFAULT_STARTING_NODE: usize = 1000;
+    const DEFAULT_SEED: u64 = 42;
+
+    /// Helper to create test parameters with common defaults
+    fn default_params() -> EngineStarterParams {
+        EngineStarterParams::new(
+            DEFAULT_NUM_HASH,
+            SIMD_LANECOUNT,
+            NodeId {
+                internal: DEFAULT_STARTING_NODE,
+            },
+            DEFAULT_SEED,
+            true,
+        )
+    }
+
+    /// Helper to create test parameters with a custom seed
+    fn params_with_seed(seed: u64) -> EngineStarterParams {
+        EngineStarterParams::new(
+            DEFAULT_NUM_HASH,
+            SIMD_LANECOUNT,
+            NodeId {
+                internal: DEFAULT_STARTING_NODE,
+            },
+            seed,
+            true,
+        )
+    }
+
+    /// Helper to create test parameters with custom dimensions
+    fn params_with_dims(plane_dim: usize) -> EngineStarterParams {
+        EngineStarterParams::new(
+            DEFAULT_NUM_HASH,
+            plane_dim,
+            NodeId {
+                internal: DEFAULT_STARTING_NODE,
+            },
+            DEFAULT_SEED,
+            true,
+        )
+    }
+
+    /// Helper to create a simple single-block query
     fn create_test_query(value: f32) -> Vec<AlignedBlock> {
         vec![AlignedBlock::new([value; SIMD_LANECOUNT])]
     }
 
+    /// Helper to create a starter and get signature for a query
+    fn get_signature_for_query(starter: &TestEngineStarter, query: &[AlignedBlock]) -> usize {
+        starter.select_starting_points(query).signature
+    }
+
+    /// Helper to assert starting node is in result
+    fn assert_contains_starting_node(result: &StartingPoints) {
+        assert!(result.start_points.contains(&NodeId {
+            internal: DEFAULT_STARTING_NODE
+        }));
+    }
+
     #[test]
     fn test_new_with_seed() {
-        let params: EngineStarterParams = EngineStarterParams {
-            num_hash: 8,
-            plane_dim: SIMD_LANECOUNT,
-            starting_node: 1000,
-            seed: 42,
-            enabled_catapults: true,
-        };
-        let starter = TestEngineStarter::new(params);
-        assert_eq!(starter.starting_node, 1000);
-        assert_eq!(starter.catapults.len(), 1 << 8); // 2^8 = 256
+        let starter = TestEngineStarter::new(default_params());
+        assert_eq!(
+            starter.starting_node,
+            NodeId {
+                internal: DEFAULT_STARTING_NODE
+            }
+        );
+        assert_eq!(starter.catapults.len(), 1 << DEFAULT_NUM_HASH);
     }
 
     #[test]
     fn test_new_creates_correct_catapult_count() {
-        let params: EngineStarterParams = EngineStarterParams {
-            num_hash: 8,
-            plane_dim: SIMD_LANECOUNT,
-            starting_node: 1000,
-            seed: 42,
-            enabled_catapults: true,
-        };
-        let starter = TestEngineStarter::new(params);
-        assert_eq!(starter.starting_node, 1000);
-        assert_eq!(starter.catapults.len(), 1 << 8); // 2^8 = 256
+        let starter = TestEngineStarter::new(default_params());
+        assert_eq!(
+            starter.starting_node,
+            NodeId {
+                internal: DEFAULT_STARTING_NODE
+            }
+        );
+        assert_eq!(starter.catapults.len(), 1 << DEFAULT_NUM_HASH);
     }
 
     #[test]
     fn test_select_starting_points_includes_starting_node() {
-        let params: EngineStarterParams = EngineStarterParams {
-            num_hash: 8,
-            plane_dim: SIMD_LANECOUNT,
-            starting_node: 1000,
-            seed: 42,
-            enabled_catapults: true,
-        };
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(default_params());
         let query = create_test_query(1.0);
-
         let result = starter.select_starting_points(&query);
-
-        // Should always include the starting_node
-        assert!(result.start_points.contains(&1000));
+        assert_contains_starting_node(&result);
     }
 
     #[test]
     fn test_insert_and_retrieve_catapult() {
-        let params = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(default_params());
         let query = create_test_query(1.0);
+        let signature = get_signature_for_query(&starter, &query);
+
+        starter.new_catapult(signature, NodeId { internal: 42 });
 
         let result = starter.select_starting_points(&query);
-        let signature = result.signature;
-
-        // Insert a catapult for this signature
-        starter.new_catapult(signature, 42);
-
-        // Retrieve again and verify the catapult is included
-        let result2 = starter.select_starting_points(&query);
-        assert!(result2.start_points.contains(&42));
-        assert!(result2.start_points.contains(&1000)); // starting_node still there
+        assert!(result.start_points.contains(&NodeId { internal: 42 }));
+        assert_contains_starting_node(&result);
 
         starter.clear_all_catapults();
-        let result3 = starter.select_starting_points(&query);
-        assert!(!result3.start_points.contains(&42));
-        assert!(result3.start_points.contains(&1000)); // starting_node still there
+        let result = starter.select_starting_points(&query);
+        assert!(!result.start_points.contains(&NodeId { internal: 42 }));
+        assert_contains_starting_node(&result);
     }
 
     #[test]
     fn test_catapult_persists_across_queries() {
-        let params = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(default_params());
         let query = create_test_query(1.0);
+        let signature = get_signature_for_query(&starter, &query);
+        starter.new_catapult(signature, NodeId { internal: 99 });
 
-        let result = starter.select_starting_points(&query);
-        starter.new_catapult(result.signature, 99);
-
-        // Query again multiple times
         for _ in 0..3 {
-            let result_again = starter.select_starting_points(&query);
-            assert!(result_again.start_points.contains(&99));
+            let result = starter.select_starting_points(&query);
+            assert!(result.start_points.contains(&NodeId { internal: 99 }));
         }
     }
 
     #[test]
     fn test_same_query_returns_consistent_signature() {
-        let params = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(default_params());
         let query = create_test_query(1.0);
 
         let result1 = starter.select_starting_points(&query);
         let result2 = starter.select_starting_points(&query);
 
-        // Same query should return same signature
         assert_eq!(result1.signature, result2.signature);
         assert_eq!(result1.start_points, result2.start_points);
     }
 
     #[test]
     fn test_different_queries_different_signatures() {
-        let params = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(default_params());
         let query1 = create_test_query(1.0);
         let query2 = create_test_query(-1.0);
 
         let result1 = starter.select_starting_points(&query1);
         let result2 = starter.select_starting_points(&query2);
 
-        // Different queries should likely return different signatures
-        // (Not guaranteed but highly probable with good hashing)
         assert_ne!(result1.signature, result2.signature);
     }
     #[test]
     fn test_determinism_with_seed() {
-        let params1 = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter1 = TestEngineStarter::new(params1);
-        let params2 = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter2 = TestEngineStarter::new(params2);
+        let starter1 = TestEngineStarter::new(params_with_seed(42));
+        let starter2 = TestEngineStarter::new(params_with_seed(42));
         let query = create_test_query(1.5);
 
-        let result1 = starter1.select_starting_points(&query);
-        let result2 = starter2.select_starting_points(&query);
+        let sig1 = get_signature_for_query(&starter1, &query);
+        let sig2 = get_signature_for_query(&starter2, &query);
 
-        // Same seed and query should give same signature
-        assert_eq!(result1.signature, result2.signature);
+        assert_eq!(sig1, sig2);
     }
 
     #[test]
     fn test_different_seeds_different_signatures() {
-        let params1 = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter1 = TestEngineStarter::new(params1);
-        let params2 = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 99, true);
-        let starter2 = TestEngineStarter::new(params2);
+        let starter1 = TestEngineStarter::new(params_with_seed(42));
+        let starter2 = TestEngineStarter::new(params_with_seed(99));
         let query = create_test_query(1.0);
 
-        let result1 = starter1.select_starting_points(&query);
-        let result2 = starter2.select_starting_points(&query);
+        let sig1 = get_signature_for_query(&starter1, &query);
+        let sig2 = get_signature_for_query(&starter2, &query);
 
-        // Different seeds should give different signatures for same query
-        assert_ne!(result1.signature, result2.signature);
+        assert_ne!(sig1, sig2);
     }
 
     #[test]
     fn test_multiple_catapults_same_signature() {
-        let params = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(default_params());
         let query = create_test_query(1.0);
+        let signature = get_signature_for_query(&starter, &query);
+
+        starter.new_catapult(signature, NodeId { internal: 100 });
+        starter.new_catapult(signature, NodeId { internal: 200 });
+        starter.new_catapult(signature, NodeId { internal: 300 });
 
         let result = starter.select_starting_points(&query);
-        let signature = result.signature;
 
-        // Insert multiple catapults for the same signature
-        starter.new_catapult(signature, 100);
-        starter.new_catapult(signature, 200);
-        starter.new_catapult(signature, 300);
-
-        let result2 = starter.select_starting_points(&query);
-
-        // All catapults should be present
-        assert!(result2.start_points.contains(&100));
-        assert!(result2.start_points.contains(&200));
-        assert!(result2.start_points.contains(&300));
-        assert!(result2.start_points.contains(&1000));
+        assert!(result.start_points.contains(&NodeId { internal: 100 }));
+        assert!(result.start_points.contains(&NodeId { internal: 200 }));
+        assert!(result.start_points.contains(&NodeId { internal: 300 }));
+        assert_contains_starting_node(&result);
     }
 
     #[test]
     fn test_different_signatures_independent_catapults() {
-        let params = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(default_params());
         let query1 = create_test_query(1.0);
         let query2 = create_test_query(-1.0);
+
+        let sig1 = get_signature_for_query(&starter, &query1);
+        let sig2 = get_signature_for_query(&starter, &query2);
+
+        starter.new_catapult(sig1, NodeId { internal: 111 });
+        starter.new_catapult(sig2, NodeId { internal: 222 });
 
         let result1 = starter.select_starting_points(&query1);
         let result2 = starter.select_starting_points(&query2);
 
-        // Insert catapults for different signatures
-        starter.new_catapult(result1.signature, 111);
-        starter.new_catapult(result2.signature, 222);
-
-        let result1_again = starter.select_starting_points(&query1);
-        let result2_again = starter.select_starting_points(&query2);
-
-        // Each signature should only have its own catapults
-        assert!(result1_again.start_points.contains(&111));
-        assert!(!result1_again.start_points.contains(&222));
-
-        assert!(result2_again.start_points.contains(&222));
-        assert!(!result2_again.start_points.contains(&111));
+        assert!(result1.start_points.contains(&NodeId { internal: 111 }));
+        assert!(!result1.start_points.contains(&NodeId { internal: 222 }));
+        assert!(result2.start_points.contains(&NodeId { internal: 222 }));
+        assert!(!result2.start_points.contains(&NodeId { internal: 111 }));
     }
 
     #[test]
     fn test_signature_within_bounds() {
-        let num_hash = 8;
-        let params = EngineStarterParams::new(num_hash, SIMD_LANECOUNT, 1000, 42, true);
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(default_params());
 
         for i in 0..10 {
             let query = create_test_query(i as f32);
-            let result = starter.select_starting_points(&query);
-
-            // Signature should be within bounds of catapult array
-            assert!(result.signature < (1 << num_hash));
+            let signature = get_signature_for_query(&starter, &query);
+            assert!(signature < (1 << DEFAULT_NUM_HASH));
         }
     }
 
     #[test]
     fn test_multidimensional_query() {
-        let params = EngineStarterParams::new(8, SIMD_LANECOUNT * 4, 1000, 42, true);
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(params_with_dims(SIMD_LANECOUNT * 4));
         let query = vec![
             AlignedBlock::new([1.0; SIMD_LANECOUNT]),
             AlignedBlock::new([2.0; SIMD_LANECOUNT]),
@@ -388,15 +398,13 @@ mod tests {
 
         let result = starter.select_starting_points(&query);
 
-        // Should return valid signature and include starting_node
-        assert!(result.signature < (1 << 8));
-        assert!(result.start_points.contains(&1000));
+        assert!(result.signature < (1 << DEFAULT_NUM_HASH));
+        assert_contains_starting_node(&result);
     }
 
     #[test]
     fn test_consistency_across_multiple_calls() {
-        let params = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(default_params());
         let query = create_test_query(3.0);
 
         let result1 = starter.select_starting_points(&query);
@@ -411,51 +419,55 @@ mod tests {
 
     #[test]
     fn test_fifo_eviction_behavior() {
-        let params = EngineStarterParams::new(8, SIMD_LANECOUNT, 1000, 42, true);
-        let starter = TestEngineStarter::new(params);
+        let starter = TestEngineStarter::new(default_params());
         let query = create_test_query(1.0);
-
-        let result = starter.select_starting_points(&query);
-        let signature = result.signature;
+        let signature = get_signature_for_query(&starter, &query);
 
         // Insert more than FifoSet capacity (30 items)
         for i in 0..35 {
-            starter.new_catapult(signature, i);
+            starter.new_catapult(signature, NodeId { internal: i });
         }
 
-        let result2 = starter.select_starting_points(&query);
+        let result = starter.select_starting_points(&query);
 
         // Should have at most 30 catapults + 1 starting_node
-        assert!(result2.start_points.len() <= 31);
-
-        // Starting node should always be present
-        assert!(result2.start_points.contains(&1000));
+        assert!(result.start_points.len() <= 31);
+        assert_contains_starting_node(&result);
 
         // Oldest entries should be evicted (0-4 should be gone)
-        assert!(!result2.start_points.contains(&0));
-        assert!(!result2.start_points.contains(&1));
-        assert!(!result2.start_points.contains(&2));
-        assert!(!result2.start_points.contains(&3));
-        assert!(!result2.start_points.contains(&4));
+        for i in 0..5 {
+            assert!(!result.start_points.contains(&NodeId { internal: i }));
+        }
 
         // Newest entries should be present (30-34)
-        assert!(result2.start_points.contains(&30));
-        assert!(result2.start_points.contains(&31));
-        assert!(result2.start_points.contains(&32));
-        assert!(result2.start_points.contains(&33));
-        assert!(result2.start_points.contains(&34));
+        for i in 30..35 {
+            assert!(result.start_points.contains(&NodeId { internal: i }));
+        }
     }
 
     #[test]
     fn test_empty_catapult_only_returns_starting_node() {
-        let params = EngineStarterParams::new(8, SIMD_LANECOUNT, 999, 42, true);
+        let custom_starting = 999;
+        let params = EngineStarterParams::new(
+            DEFAULT_NUM_HASH,
+            SIMD_LANECOUNT,
+            NodeId {
+                internal: custom_starting,
+            },
+            DEFAULT_SEED,
+            true,
+        );
         let starter = TestEngineStarter::new(params);
         let query = create_test_query(5.5);
 
         let result = starter.select_starting_points(&query);
 
-        // With no catapults inserted, should only return the starting_node
         assert_eq!(result.start_points.len(), 1);
-        assert_eq!(result.start_points[0], 999);
+        assert_eq!(
+            result.start_points[0],
+            NodeId {
+                internal: custom_starting
+            }
+        );
     }
 }

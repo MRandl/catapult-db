@@ -3,8 +3,10 @@ use std::fmt::Debug;
 use crate::{numerics::AlignedBlock, sets::fixed::FixedSet};
 
 // The ID of a Node (usize), wrapped in its own struct to avoid accidental misuse.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId {
-    internal: usize,
+    pub internal: usize,
 }
 
 /// A node in the proximity graph, containing its vector data and neighbor connections.
@@ -18,6 +20,12 @@ pub struct Node<FixedSetType: FixedSet + Debug> {
     /// The vector embedding for this node, stored as SIMD-aligned blocks of f32 values
     /// for efficient parallel distance computations.
     pub payload: Box<[AlignedBlock]>,
+}
+
+impl Debug for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.internal.fmt(f)
+    }
 }
 
 impl<FixedSetType: FixedSet + Debug> Debug for Node<FixedSetType> {

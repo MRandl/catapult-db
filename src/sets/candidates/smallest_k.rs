@@ -116,6 +116,8 @@ impl IntoIterator for SmallestKCandidates {
 mod tests {
     use rand_distr::num_traits::ToPrimitive;
 
+    use crate::search::NodeId;
+
     use super::*;
 
     fn contents_sorted(sk: &SmallestKCandidates) -> Vec<CandidateEntry> {
@@ -131,7 +133,7 @@ mod tests {
         for x in 1..=10 {
             sk.insert_batch(&[CandidateEntry {
                 distance: x.to_f32().unwrap().into(),
-                index: x,
+                index: NodeId { internal: x },
                 has_catapult_ancestor: false,
             }]);
         }
@@ -139,7 +141,7 @@ mod tests {
         assert_eq!(
             contents_sorted(&sk)
                 .iter()
-                .map(|c| c.index)
+                .map(|c| c.index.internal)
                 .collect::<Vec<_>>(),
             vec![1, 2, 3]
         );
@@ -154,17 +156,17 @@ mod tests {
         let batch_1 = vec![
             CandidateEntry {
                 distance: 10.0.into(),
-                index: 10,
+                index: NodeId { internal: 10 },
                 has_catapult_ancestor: false,
             },
             CandidateEntry {
                 distance: 5.0.into(),
-                index: 5,
+                index: NodeId { internal: 5 },
                 has_catapult_ancestor: false,
             },
             CandidateEntry {
                 distance: 10.0.into(),
-                index: 10,
+                index: NodeId { internal: 10 },
                 has_catapult_ancestor: false,
             }, // Duplicate inside batch
         ];
@@ -172,29 +174,29 @@ mod tests {
 
         // State should be [5, 10]
         assert_eq!(sk.sorted_members.len(), 2);
-        assert_eq!(sk.sorted_members[0].index, 5);
+        assert_eq!(sk.sorted_members[0].index.internal, 5);
 
         // Batch 2: Larger than capacity, contains smaller values,
         // and contains a duplicate of an existing member (5)
         let batch_2 = vec![
             CandidateEntry {
                 distance: 2.0.into(),
-                index: 2,
+                index: NodeId { internal: 2 },
                 has_catapult_ancestor: false,
             }, // New smallest
             CandidateEntry {
                 distance: 5.0.into(),
-                index: 5,
+                index: NodeId { internal: 5 },
                 has_catapult_ancestor: false,
             }, // Duplicate of existing
             CandidateEntry {
                 distance: 7.0.into(),
-                index: 7,
+                index: NodeId { internal: 7 },
                 has_catapult_ancestor: false,
             }, // New middle
             CandidateEntry {
                 distance: 1.0.into(),
-                index: 1,
+                index: NodeId { internal: 1 },
                 has_catapult_ancestor: false,
             }, // New absolute smallest
         ];
@@ -204,7 +206,7 @@ mod tests {
         // 7 and 10 should have been displaced/ignored.
         assert_eq!(sk.sorted_members.len(), 3);
 
-        let results: Vec<usize> = sk.sorted_members.iter().map(|c| c.index).collect();
+        let results: Vec<usize> = sk.sorted_members.iter().map(|c| c.index.internal).collect();
         assert_eq!(results, vec![1, 2, 5]);
     }
 
@@ -218,7 +220,7 @@ mod tests {
     fn entry(dist: f32, idx: usize) -> CandidateEntry {
         CandidateEntry {
             distance: dist.into(),
-            index: idx,
+            index: NodeId { internal: idx },
             has_catapult_ancestor: false,
         }
     }
@@ -231,7 +233,7 @@ mod tests {
             sk.insert_batch(&[entry(i as f32, i)]);
         }
         assert_eq!(sk.sorted_members.len(), 3);
-        let mut results: Vec<_> = sk.into_iter().map(|c| c.index).collect();
+        let mut results: Vec<_> = sk.into_iter().map(|c| c.index.internal).collect();
         results.sort();
         assert_eq!(results, vec![1, 2, 3]);
     }
@@ -274,7 +276,7 @@ mod tests {
         sk.insert_batch(&[entry(50.0, 1), entry(10.0, 2), entry(100.0, 3)]); // Ignore
 
         assert_eq!(sk.sorted_members.len(), 1);
-        assert_eq!(sk.iter().next().unwrap().index, 2);
+        assert_eq!(sk.iter().next().unwrap().index.internal, 2);
     }
 
     #[test]

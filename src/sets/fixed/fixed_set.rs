@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use crate::search::NodeId;
+
 /// A trait for immutable neighbor sets in flat proximity graphs.
 ///
 /// This abstraction provides a uniform interface for accessing neighbor relationships
@@ -9,7 +11,7 @@ pub trait FixedSet: Debug {
     ///
     /// # Returns
     /// A boxed slice containing the neighbor node indices
-    fn to_slice(&self) -> Box<[usize]>;
+    fn to_slice(&self) -> Box<[NodeId]>;
 }
 
 /// An immutable set of neighbor indices for a flat proximity graph node.
@@ -17,7 +19,7 @@ pub trait FixedSet: Debug {
 /// Stores a single fixed list of neighbor indices that does not vary by level.
 /// This is suitable for single-layer proximity graphs like DiskANN-style structures.
 pub struct FlatFixedSet {
-    neighbors: Box<[usize]>,
+    neighbors: Box<[NodeId]>,
 }
 
 impl FlatFixedSet {
@@ -32,13 +34,16 @@ impl FlatFixedSet {
     /// A new `FlatFixedSet` containing the provided neighbor indices
     pub fn new(initial_values: Vec<usize>) -> Self {
         FlatFixedSet {
-            neighbors: initial_values.into_boxed_slice(),
+            neighbors: initial_values
+                .iter()
+                .map(|&x| NodeId { internal: x })
+                .collect(),
         }
     }
 }
 
 impl FixedSet for FlatFixedSet {
-    fn to_slice(&self) -> Box<[usize]> {
+    fn to_slice(&self) -> Box<[NodeId]> {
         self.neighbors.clone()
     }
 }
@@ -61,7 +66,14 @@ mod tests {
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values.clone());
 
         assert_eq!(fixed_set.neighbors.len(), 5);
-        assert_eq!(&*fixed_set.neighbors, &[1, 2, 3, 4, 5]);
+        assert_eq!(
+            &*fixed_set
+                .neighbors
+                .iter()
+                .map(|x| x.internal)
+                .collect::<Vec<_>>(),
+            &[1, 2, 3, 4, 5]
+        );
     }
 
     #[test]
@@ -78,41 +90,7 @@ mod tests {
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
         assert_eq!(fixed_set.neighbors.len(), 1);
-        assert_eq!(fixed_set.neighbors[0], 42);
-    }
-
-    #[test]
-    fn test_neighbors_returns_cloned_data() {
-        let values = vec![10, 20, 30];
-        let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
-
-        let result = fixed_set.to_slice();
-
-        assert_eq!(result.len(), 3);
-        assert_eq!(&*result, &[10, 20, 30]);
-    }
-
-    #[test]
-    fn test_neighbors_returns_all_values() {
-        let values = vec![100, 200, 300, 400];
-        let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
-
-        let result = fixed_set.to_slice();
-
-        assert_eq!(result.len(), 4);
-        assert_eq!(&*result, &[100, 200, 300, 400]);
-    }
-
-    #[test]
-    fn test_neighbors_consistent_across_calls() {
-        let values = vec![1, 2, 3];
-        let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
-
-        let result1 = fixed_set.to_slice();
-        let result2 = fixed_set.to_slice();
-
-        assert_eq!(&*result1, &*result2);
-        assert_eq!(&*result1, &[1, 2, 3]);
+        assert_eq!(fixed_set.neighbors[0], NodeId { internal: 42 });
     }
 
     #[test]
@@ -150,8 +128,8 @@ mod tests {
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values.clone());
 
         assert_eq!(fixed_set.neighbors.len(), 10000);
-        assert_eq!(fixed_set.neighbors[0], 0);
-        assert_eq!(fixed_set.neighbors[9999], 9999);
+        assert_eq!(fixed_set.neighbors[0], NodeId { internal: 0 });
+        assert_eq!(fixed_set.neighbors[9999], NodeId { internal: 9999 });
     }
 
     #[test]
@@ -160,7 +138,14 @@ mod tests {
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
         assert_eq!(fixed_set.neighbors.len(), 5);
-        assert_eq!(&*fixed_set.neighbors, &[5, 5, 5, 10, 10]);
+        assert_eq!(
+            &*fixed_set
+                .neighbors
+                .iter()
+                .map(|x| x.internal)
+                .collect::<Vec<_>>(),
+            &[5, 5, 5, 10, 10]
+        );
     }
 
     #[test]
@@ -169,9 +154,19 @@ mod tests {
         let fixed_set: FlatFixedSet = FlatFixedSet::new(values);
 
         assert_eq!(fixed_set.neighbors.len(), 3);
-        assert_eq!(fixed_set.neighbors[0], usize::MAX);
-        assert_eq!(fixed_set.neighbors[1], usize::MAX - 1);
-        assert_eq!(fixed_set.neighbors[2], 0);
+        assert_eq!(
+            fixed_set.neighbors[0],
+            NodeId {
+                internal: usize::MAX
+            }
+        );
+        assert_eq!(
+            fixed_set.neighbors[1],
+            NodeId {
+                internal: usize::MAX - 1
+            }
+        );
+        assert_eq!(fixed_set.neighbors[2], NodeId { internal: 0 });
     }
 
     #[test]

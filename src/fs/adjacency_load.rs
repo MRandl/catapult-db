@@ -1,7 +1,7 @@
 use crate::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
     search::{
-        AdjacencyGraph, Node,
+        AdjacencyGraph, Node, NodeId,
         graph_algo::{FlatCatapultChoice, FlatSearch},
         hash_start::{EngineStarter, EngineStarterParams},
     },
@@ -194,7 +194,9 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         assert!(graph_file.count() == 0);
         assert!(payload_file.count() == 0);
 
-        engine_params.starting_node = entry_point as usize;
+        engine_params.starting_node = NodeId {
+            internal: entry_point as usize,
+        };
         AdjacencyGraph::new_flat(
             adjacency,
             EngineStarter::<T>::new(engine_params),
@@ -207,7 +209,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 mod tests {
     use crate::{
         numerics::SIMD_LANECOUNT,
-        search::{AdjacencyGraph, graph_algo::FlatSearch, hash_start::EngineStarterParams},
+        search::{AdjacencyGraph, NodeId, graph_algo::FlatSearch, hash_start::EngineStarterParams},
         sets::catapults::FifoSet,
     };
 
@@ -215,8 +217,10 @@ mod tests {
     fn loading_example_graph() {
         let graph_path = "test_index/ann";
         let payload_path = "test_index/ann_vectors.bin";
-        let engine_params1 = EngineStarterParams::new(4, SIMD_LANECOUNT, 0, 42, true);
-        let engine_params2 = EngineStarterParams::new(4, SIMD_LANECOUNT, 0, 42, false);
+        let engine_params1 =
+            EngineStarterParams::new(4, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, true);
+        let engine_params2 =
+            EngineStarterParams::new(4, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, false);
 
         let graphed1 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
             graph_path.into(),

@@ -1,3 +1,5 @@
+use crate::search::NodeId;
+
 /// A trait for data structures that store catapult node indices with eviction policies.
 ///
 /// Catapult structures maintain a bounded set of node indices that serve as cached
@@ -12,7 +14,7 @@ pub trait CatapultEvictingStructure {
     ///
     /// # Arguments
     /// * `neighbor` - The node index to insert as a catapult
-    fn insert(&mut self, neighbor: usize);
+    fn insert(&mut self, neighbor: NodeId);
 
     /// Creates a new empty catapult structure.
     ///
@@ -26,7 +28,7 @@ pub trait CatapultEvictingStructure {
     ///
     /// # Returns
     /// A vector containing all stored node indices
-    fn to_vec(&self) -> Vec<usize>;
+    fn to_vec(&self) -> Vec<NodeId>;
 
     /// Removes all stored catapults, resetting the structure to empty.
     fn clear(&mut self);

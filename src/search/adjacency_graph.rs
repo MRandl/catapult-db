@@ -3,6 +3,7 @@ use hashbrown::HashSet;
 use crate::{
     numerics::{AlignedBlock, VectorLike},
     search::{
+        NodeId,
         graph_algo::{FlatCatapultChoice, FlatSearch, GraphSearchAlgorithm},
         hash_start::EngineStarter,
         node::Node,
@@ -93,7 +94,7 @@ where
     /// A vector of candidate entries with computed distances
     fn distances_from_indices(
         &self,
-        indices: &[usize],
+        indices: &[NodeId],
         query: &[AlignedBlock],
         catapult_marker: bool,
         stats: &mut Stats,
@@ -103,7 +104,7 @@ where
         indices
             .iter()
             .map(|&index| {
-                let starting_point = &self.adjacency[index];
+                let starting_point = &self.adjacency[index.internal];
                 let starting_score = starting_point.payload.l2_squared(query);
 
                 CandidateEntry {
@@ -172,7 +173,8 @@ where
         // while we have some node on which to expand (at first, the best LSH entry point),
         // we keep expanding it (i.e. looking at its neighbors for better guesses)
         while let Some(best_candidate_node) = best_candidate {
-            let best_candidate_neighs = &self.adjacency[best_candidate_node.index].neighbors;
+            let best_candidate_neighs =
+                &self.adjacency[best_candidate_node.index.internal].neighbors;
             // identify the neighbors and catapult landing points of our current best guess.
             // All of these guys become candidates for expansion. if we have too many candidates
             // (beam width parameter), the `candidates` data structure takes care of removing the
@@ -332,7 +334,13 @@ mod tests {
             FlatCatapultChoice::CatapultsDisabled
         };
         // Start from node 0
-        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, 0, 42, catapults_enabled);
+        let params = EngineStarterParams::new(
+            4,
+            SIMD_LANECOUNT,
+            NodeId { internal: 0 },
+            42,
+            catapults_enabled,
+        );
         AdjacencyGraph::new_flat(nodes, EngineStarter::new(params), catapult_choice)
     }
 
@@ -359,8 +367,8 @@ mod tests {
         // Final candidates (in order of distance): 1 (1), 2 (81), 0 (121)
         // Top K=2 results: [1, 2]
         assert_eq!(results1.len(), k);
-        assert_eq!(results1[0].index, 1);
-        assert_eq!(results1[1].index, 2);
+        assert_eq!(results1[0].index.internal, 1);
+        assert_eq!(results1[1].index.internal, 2);
 
         // Verify the graph structure - count total edges
         let total_edges: usize = graph
@@ -436,7 +444,7 @@ mod tests {
             },
         ];
         // Start points: 0, 2
-        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, 0, 42, true);
+        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, true);
         let graph = AdjacencyGraph::new_flat(
             nodes,
             TestEngineStarter::new(params),
@@ -450,8 +458,8 @@ mod tests {
         let results = graph.beam_search(&query, k, beam_width, &mut stats);
         // Top K=2 results: [1, 2]
         assert_eq!(results.len(), k);
-        assert_eq!(results[0].index, 1);
-        assert_eq!(results[1].index, 2);
+        assert_eq!(results[0].index.internal, 1);
+        assert_eq!(results[1].index.internal, 2);
     }
 
     #[test]
@@ -489,7 +497,7 @@ mod tests {
                 neighbors: FlatFixedSet::new(vec![]),
             },
         ];
-        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, 1, 42, true);
+        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, NodeId { internal: 1 }, 42, true);
         let graph = AdjacencyGraph::new_flat(
             nodes,
             TestEngineStarter::new(params),
@@ -504,6 +512,6 @@ mod tests {
 
         // The globally best result (Node 4) must be found and returned.
         assert_eq!(results.len(), k);
-        assert_eq!(results[0].index, 4);
+        assert_eq!(results[0].index.internal, 4);
     }
 }

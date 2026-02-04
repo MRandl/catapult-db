@@ -1,4 +1,4 @@
-use crate::sets::candidates::TotalF32;
+use crate::{search::NodeId, sets::candidates::TotalF32};
 use std::hash::Hash;
 
 /// A candidate node in a graph search, storing its distance from the query point
@@ -13,7 +13,7 @@ pub struct CandidateEntry {
     pub distance: TotalF32,
 
     /// Index of the candidate node in the graph.
-    pub index: usize,
+    pub index: NodeId,
 
     /// Whether this candidate was discovered via a catapult (long-range cached connection)
     /// rather than through standard neighbor traversal.
