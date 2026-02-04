@@ -31,16 +31,16 @@ impl AlignedBlock {
 
     /// Converts a flat vector of f32 values into SIMD-aligned blocks with zero-padding.
     ///
-    /// This function chunks the input vector into blocks of `SIMD_LANECOUNT` elements,
-    /// padding the final block with zeros if the input length is not a multiple of
-    /// `SIMD_LANECOUNT`. An additional zero-filled block is always appended.
+    /// This function chunks the input vector into blocks of `SIMD_LANECOUNT` elements.
+    /// If the input length is not a multiple of `SIMD_LANECOUNT`, the final block is
+    /// zero-padded to complete the block.
     ///
     /// # Arguments
     /// * `data` - Vector of f32 values to convert into aligned blocks
     ///
     /// # Returns
-    /// A vector of `AlignedBlock` instances, with the last block zero-padded if necessary,
-    /// plus one additional zero-filled block
+    /// A vector of `AlignedBlock` instances. If the input length is an exact multiple
+    /// of `SIMD_LANECOUNT`, no padding is added. Otherwise, the final block is zero-padded.
     pub fn allocate_padded(data: Vec<f32>) -> Vec<AlignedBlock> {
         let mut returned = Vec::with_capacity(data.len().div_ceil(SIMD_LANECOUNT));
 
@@ -49,11 +49,15 @@ impl AlignedBlock {
             returned.push(Self::new(chunk));
         }
 
-        let mut remainder_data = [0.0; SIMD_LANECOUNT];
-        for (i, b) in remainder.iter().enumerate() {
-            remainder_data[i] = *b;
+        // Only add a remainder block if there are leftover elements
+        if !remainder.is_empty() {
+            let mut remainder_data = [0.0; SIMD_LANECOUNT];
+            for (i, b) in remainder.iter().enumerate() {
+                remainder_data[i] = *b;
+            }
+            returned.push(Self::new(remainder_data));
         }
-        returned.push(Self::new(remainder_data));
+
         returned
     }
 }
@@ -80,7 +84,7 @@ mod tests {
 
     #[test]
     fn test_allocate_padded() {
-        // Test with exact multiple of SIMD_LANECOUNT
+        // Test with exact multiple of SIMD_LANECOUNT - should not add extra padding
         let data = vec![
             1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
         ];
@@ -93,11 +97,24 @@ mod tests {
                 16.0
             ]
         );
-        // Test with remainder
+
+        // Test with remainder - should add one zero-padded block
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let blocks = AlignedBlock::allocate_padded(data);
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].data[0..5], [1.0, 2.0, 3.0, 4.0, 5.0]);
         assert_eq!(blocks[0].data[5..], [0.0; 11]);
+
+        // Test with multiple full blocks - should not add extra padding
+        let data = vec![1.0; 32]; // Exactly 2 blocks
+        let blocks = AlignedBlock::allocate_padded(data);
+        assert_eq!(blocks.len(), 2);
+
+        // Test with multiple blocks plus remainder
+        let data = vec![1.0; 20]; // 1 full block + 4 elements
+        let blocks = AlignedBlock::allocate_padded(data);
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[1].data[0..4], [1.0; 4]);
+        assert_eq!(blocks[1].data[4..], [0.0; 12]);
     }
 }
