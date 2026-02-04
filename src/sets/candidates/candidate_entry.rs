@@ -1,5 +1,4 @@
 use crate::{search::NodeId, sets::candidates::TotalF32};
-use std::hash::Hash;
 
 /// A candidate node in a graph search, storing its distance from the query point
 /// and metadata about how it was discovered.
@@ -7,7 +6,7 @@ use std::hash::Hash;
 /// Candidates are ordered primarily by distance (ascending) for use in priority queues
 /// during beam search algorithms. Two candidates with the same distance and index are
 /// considered equal regardless of their catapult ancestry.
-#[derive(PartialEq, Eq, Copy, Clone, Hash, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct CandidateEntry {
     /// Distance from the query point to this candidate node.
     pub distance: TotalF32,
