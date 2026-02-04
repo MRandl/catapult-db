@@ -152,7 +152,10 @@ fn run_search_job(
 
     let avg_dists_computed = combined_stats.get_computed_dists() as f64 / num_queries as f64;
     let avg_nodes_visited = combined_stats.get_nodes_visited() as f64 / num_queries as f64;
-    let checksum = reses.into_iter().map(|e| e.index).reduce(|a, b| a + b);
+    let checksum = reses
+        .into_iter()
+        .map(|e| e.index.internal)
+        .reduce(|a, b| a + b);
 
     let result = if catapults_enabled {
         let catapult_usage_pct = if num_queries > 0 {
@@ -260,7 +263,7 @@ fn main() {
                 EngineStarterParams {
                     num_hash: 16,
                     plane_dim: queries[0].len() * SIMD_LANECOUNT,
-                    starting_node: 0,
+                    starting_node: catapult::search::NodeId { internal: 0 },
                     seed,
                     enabled_catapults: args.catapults,
                 },
