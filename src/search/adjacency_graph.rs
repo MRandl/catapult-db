@@ -175,7 +175,7 @@ where
         while let Some(best_candidate_node) = best_candidate {
             let best_candidate_neighs =
                 &self.adjacency[best_candidate_node.index.internal].neighbors;
-            // identify the neighbors and catapult landing points of our current best guess.
+            // identify the neighbors of our current best guess.
             // All of these guys become candidates for expansion. if we have too many candidates
             // (beam width parameter), the `candidates` data structure takes care of removing the
             // worst ones (and the duplicates).
