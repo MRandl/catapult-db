@@ -1,7 +1,7 @@
 use catapult::{
     fs::Queries,
-    numerics::{AlignedBlock, SIMD_LANECOUNT},
-    search::{AdjacencyGraph, graph_algo::FlatSearch, hash_start::EngineStarterParams},
+    numerics::AlignedBlock,
+    search::{AdjacencyGraph, graph_algo::FlatSearch},
     sets::catapults::FifoSet,
     statistics::Stats,
 };
@@ -260,13 +260,9 @@ fn main() {
             AdjacencyGraph::<FifoSet<30>, FlatSearch>::load_flat_from_path(
                 PathBuf::from_str(&args.graph).unwrap(),
                 PathBuf::from_str(&args.payload).unwrap(),
-                EngineStarterParams {
-                    num_hash: 16,
-                    plane_dim: queries[0].len() * SIMD_LANECOUNT,
-                    starting_node: catapult::search::NodeId { internal: 0 },
-                    seed,
-                    enabled_catapults: args.catapults,
-                },
+                16, // num_hash
+                seed,
+                args.catapults,
             ),
         );
         let graph_size = full_graph.len();

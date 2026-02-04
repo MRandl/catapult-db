@@ -138,10 +138,12 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
     /// # Arguments
     /// * `graph_path` - Path to the binary graph structure file
     /// * `payload_path` - Path to the binary payload vectors file
-    /// * `engine_params` - Configuration for the LSH engine (starting_node will be overwritten)
+    /// * `num_hash` - Number of LSH hash bits (creates 2^num_hash buckets)
+    /// * `seed` - Random seed for LSH hyperplane generation
+    /// * `enabled_catapults` - Whether to enable catapult acceleration
     ///
     /// # Returns
-    /// A new `AdjacencyGraph` loaded from the files
+    /// A new `AdjacencyGraph` with the entry point from the file used as the starting node
     ///
     /// # Panics
     /// * Panics if files cannot be opened
@@ -151,7 +153,9 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
     pub fn load_flat_from_path(
         graph_path: PathBuf,
         payload_path: PathBuf,
-        mut engine_params: EngineStarterParams,
+        num_hash: usize,
+        seed: u64,
+        enabled_catapults: bool,
     ) -> Self {
         let mut graph_file = BufReader::new(File::open(graph_path).expect("FNF")).bytes();
         let mut payload_file = BufReader::new(File::open(payload_path).expect("FNF")).bytes();
@@ -194,13 +198,20 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         assert!(graph_file.count() == 0);
         assert!(payload_file.count() == 0);
 
-        engine_params.starting_node = NodeId {
+        let entry_point_id = NodeId {
             internal: entry_point as usize,
         };
+
+        // Determine plane_dim from the first node's payload
+        let plane_dim = adjacency[0].payload.len() * SIMD_LANECOUNT;
+
+        let engine_params =
+            EngineStarterParams::new(num_hash, plane_dim, entry_point_id, seed, enabled_catapults);
+
         AdjacencyGraph::new_flat(
             adjacency,
             EngineStarter::<T>::new(engine_params),
-            FlatCatapultChoice::from_bool(engine_params.enabled_catapults),
+            FlatCatapultChoice::from_bool(enabled_catapults),
         )
     }
 }
@@ -208,8 +219,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        numerics::SIMD_LANECOUNT,
-        search::{AdjacencyGraph, NodeId, graph_algo::FlatSearch, hash_start::EngineStarterParams},
+        search::{AdjacencyGraph, graph_algo::FlatSearch},
         sets::catapults::FifoSet,
     };
 
@@ -217,21 +227,21 @@ mod tests {
     fn loading_example_graph() {
         let graph_path = "test_index/ann";
         let payload_path = "test_index/ann_vectors.bin";
-        let engine_params1 =
-            EngineStarterParams::new(4, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, true);
-        let engine_params2 =
-            EngineStarterParams::new(4, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, false);
 
         let graphed1 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
-            engine_params1,
+            4,    // num_hash
+            42,   // seed
+            true, // enabled_catapults
         );
 
         let graphed2 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
-            engine_params2,
+            4,     // num_hash
+            42,    // seed
+            false, // enabled_catapults
         );
 
         assert!(graphed1.len() == 4);

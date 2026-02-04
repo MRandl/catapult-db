@@ -245,11 +245,14 @@ where
     ) -> Vec<CandidateEntry> {
         let hash_search = self.starter.select_starting_points(query);
         let signature = hash_search.signature;
-        let entry_points = hash_search.start_points;
 
-        let mut distances = self.distances_from_indices(&entry_points, query, true, stats);
-        let last_index = distances.len() - 1;
-        distances[last_index].has_catapult_ancestor = false;
+        // Convert catapults to candidate entries (marked as having catapult ancestry)
+        let mut distances = self.distances_from_indices(&hash_search.catapults, query, true, stats);
+
+        // Add the starting node (not a catapult, so marked as false)
+        let starting_node_entry =
+            self.distances_from_indices(&[hash_search.starting_node], query, false, stats);
+        distances.extend(starting_node_entry);
 
         let search_results = self.beam_search_raw(query, &distances, k, beam_width, stats);
         let best_result = search_results[0].index;

@@ -21,8 +21,11 @@ pub struct StartingPoints {
     /// The LSH signature (bucket index) for the query
     pub signature: usize,
 
-    /// Node indices to use as starting points, includes catapults and the base starting node
-    pub start_points: Vec<NodeId>,
+    /// Catapult node indices retrieved from the LSH bucket (may be empty)
+    pub catapults: Vec<NodeId>,
+
+    /// The base starting node that is always included
+    pub starting_node: NodeId,
 }
 
 /// Configuration parameters for creating an `EngineStarter`.
@@ -114,25 +117,24 @@ where
     ///
     /// Computes the LSH signature for the query and retrieves cached catapults from
     /// the corresponding bucket. The base starting node is always included. If catapults
-    /// are disabled, only the starting node is returned.
+    /// are disabled, an empty catapults vector is returned.
     ///
     /// # Arguments
     /// * `query` - The query vector as aligned blocks
     ///
     /// # Returns
-    /// A `StartingPoints` struct containing the signature and node indices to use
+    /// A `StartingPoints` struct containing the signature, catapults, and starting node
     pub fn select_starting_points(&self, query: &[AlignedBlock]) -> StartingPoints {
         let signature = self.hasher.hash_int(query);
         let catapults = if self.enabled_catapults {
-            let mut catapults = self.catapults[signature].read().unwrap().to_vec();
-            catapults.push(self.starting_node);
-            catapults
+            self.catapults[signature].read().unwrap().to_vec()
         } else {
-            vec![self.starting_node]
+            vec![]
         };
         StartingPoints {
             signature,
-            start_points: catapults,
+            catapults,
+            starting_node: self.starting_node,
         }
     }
 
@@ -219,11 +221,19 @@ mod tests {
         starter.select_starting_points(query).signature
     }
 
-    /// Helper to assert starting node is in result
+    /// Helper to check if a node is in the starting points (either catapults or starting_node)
+    fn contains_node(result: &StartingPoints, node: NodeId) -> bool {
+        result.catapults.contains(&node) || result.starting_node == node
+    }
+
+    /// Helper to assert starting node is present
     fn assert_contains_starting_node(result: &StartingPoints) {
-        assert!(result.start_points.contains(&NodeId {
-            internal: DEFAULT_STARTING_NODE
-        }));
+        assert_eq!(
+            result.starting_node,
+            NodeId {
+                internal: DEFAULT_STARTING_NODE
+            }
+        );
     }
 
     #[test]
@@ -267,12 +277,12 @@ mod tests {
         starter.new_catapult(signature, NodeId { internal: 42 });
 
         let result = starter.select_starting_points(&query);
-        assert!(result.start_points.contains(&NodeId { internal: 42 }));
+        assert!(contains_node(&result, NodeId { internal: 42 }));
         assert_contains_starting_node(&result);
 
         starter.clear_all_catapults();
         let result = starter.select_starting_points(&query);
-        assert!(!result.start_points.contains(&NodeId { internal: 42 }));
+        assert!(!contains_node(&result, NodeId { internal: 42 }));
         assert_contains_starting_node(&result);
     }
 
@@ -285,7 +295,7 @@ mod tests {
 
         for _ in 0..3 {
             let result = starter.select_starting_points(&query);
-            assert!(result.start_points.contains(&NodeId { internal: 99 }));
+            assert!(contains_node(&result, NodeId { internal: 99 }));
         }
     }
 
@@ -298,7 +308,8 @@ mod tests {
         let result2 = starter.select_starting_points(&query);
 
         assert_eq!(result1.signature, result2.signature);
-        assert_eq!(result1.start_points, result2.start_points);
+        assert_eq!(result1.catapults, result2.catapults);
+        assert_eq!(result1.starting_node, result2.starting_node);
     }
 
     #[test]
@@ -348,9 +359,9 @@ mod tests {
 
         let result = starter.select_starting_points(&query);
 
-        assert!(result.start_points.contains(&NodeId { internal: 100 }));
-        assert!(result.start_points.contains(&NodeId { internal: 200 }));
-        assert!(result.start_points.contains(&NodeId { internal: 300 }));
+        assert!(contains_node(&result, NodeId { internal: 100 }));
+        assert!(contains_node(&result, NodeId { internal: 200 }));
+        assert!(contains_node(&result, NodeId { internal: 300 }));
         assert_contains_starting_node(&result);
     }
 
@@ -369,10 +380,10 @@ mod tests {
         let result1 = starter.select_starting_points(&query1);
         let result2 = starter.select_starting_points(&query2);
 
-        assert!(result1.start_points.contains(&NodeId { internal: 111 }));
-        assert!(!result1.start_points.contains(&NodeId { internal: 222 }));
-        assert!(result2.start_points.contains(&NodeId { internal: 222 }));
-        assert!(!result2.start_points.contains(&NodeId { internal: 111 }));
+        assert!(contains_node(&result1, NodeId { internal: 111 }));
+        assert!(!contains_node(&result1, NodeId { internal: 222 }));
+        assert!(contains_node(&result2, NodeId { internal: 222 }));
+        assert!(!contains_node(&result2, NodeId { internal: 111 }));
     }
 
     #[test]
@@ -413,8 +424,10 @@ mod tests {
 
         assert_eq!(result1.signature, result2.signature);
         assert_eq!(result2.signature, result3.signature);
-        assert_eq!(result1.start_points, result2.start_points);
-        assert_eq!(result2.start_points, result3.start_points);
+        assert_eq!(result1.catapults, result2.catapults);
+        assert_eq!(result1.starting_node, result2.starting_node);
+        assert_eq!(result2.catapults, result3.catapults);
+        assert_eq!(result2.starting_node, result3.starting_node);
     }
 
     #[test]
@@ -430,18 +443,18 @@ mod tests {
 
         let result = starter.select_starting_points(&query);
 
-        // Should have at most 30 catapults + 1 starting_node
-        assert!(result.start_points.len() <= 31);
+        // Should have at most 30 catapults
+        assert!(result.catapults.len() <= 30);
         assert_contains_starting_node(&result);
 
         // Oldest entries should be evicted (0-4 should be gone)
         for i in 0..5 {
-            assert!(!result.start_points.contains(&NodeId { internal: i }));
+            assert!(!contains_node(&result, NodeId { internal: i }));
         }
 
         // Newest entries should be present (30-34)
         for i in 30..35 {
-            assert!(result.start_points.contains(&NodeId { internal: i }));
+            assert!(contains_node(&result, NodeId { internal: i }));
         }
     }
 
@@ -462,9 +475,9 @@ mod tests {
 
         let result = starter.select_starting_points(&query);
 
-        assert_eq!(result.start_points.len(), 1);
+        assert_eq!(result.catapults.len(), 0);
         assert_eq!(
-            result.start_points[0],
+            result.starting_node,
             NodeId {
                 internal: custom_starting
             }
