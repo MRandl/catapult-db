@@ -1,4 +1,5 @@
 /target
+bindings/target
 .DS_Store
 perf.data
 perf.data.old
