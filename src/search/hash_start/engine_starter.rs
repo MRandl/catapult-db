@@ -2,7 +2,7 @@ use std::sync::RwLock;
 
 use crate::search::NodeId;
 use crate::sets::catapults::CatapultEvictingStructure;
-use crate::{numerics::AlignedBlock, search::hash_start::hasher::SimilarityHasher};
+use crate::{numerics::AlignedBlock, search::hash_start::hyperplane_hasher::SimilarityHasher};
 
 /// Manages LSH-based catapult storage and starting point selection for graph searches.
 ///
