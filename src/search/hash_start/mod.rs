@@ -6,5 +6,6 @@
 mod engine_starter;
 mod hyperplane_hasher;
 mod pstable_hasher;
+pub mod zorder_index;
 
 pub use engine_starter::*;

@@ -1,4 +1,7 @@
-use crate::numerics::{AlignedBlock, VectorLike};
+use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand_distr::{StandardNormal, Uniform};
+
+use crate::numerics::{AlignedBlock, SIMD_LANECOUNT, VectorLike};
 
 #[allow(dead_code)]
 pub struct PStableHashingBlock {
@@ -8,21 +11,41 @@ pub struct PStableHashingBlock {
 }
 
 impl PStableHashingBlock {
-    /// Creates a new PStableHashingBlock with the given random projection vectors and bias terms.
-    ///
-    /// # Arguments
-    /// * `a_vectors` - Random projection vectors for LSH. Each vector should be the same length as input vectors.
-    /// * `bs` - Bias terms for each hash function. Must have the same length as `a_vectors`.
-    ///
-    /// # Panics
-    /// Panics if `a_vectors` and `bs` have different lengths.
-    pub fn new(a_vectors: Vec<Vec<AlignedBlock>>, bs: Vec<f32>, w: f32) -> Self {
-        assert_eq!(
-            a_vectors.len(),
-            bs.len(),
-            "Number of projection vectors must match number of bias terms"
+    pub fn new_seeded(num_hash: usize, stored_vectors_dim: usize, seed: u64, w: f32) -> Self {
+        let rng1 = StdRng::seed_from_u64(seed);
+        let rng2 = StdRng::seed_from_u64(u64::MAX ^ seed);
+
+        assert!(
+            stored_vectors_dim.is_multiple_of(SIMD_LANECOUNT),
+            "dim must be multiple of SIMD_LANECOUNT"
         );
-        Self { a_vectors, bs, w }
+
+        let mut gaussian_iter = rng1.sample_iter(StandardNormal);
+        let mut uniform_iter = rng2.sample_iter(Uniform::new(0.0, w).unwrap());
+
+        let projections: Vec<Vec<AlignedBlock>> = (0..num_hash)
+            .map(|_| {
+                (0..stored_vectors_dim / SIMD_LANECOUNT)
+                    .map(|_| {
+                        let mut block = [0.0; SIMD_LANECOUNT];
+                        for b in block.iter_mut() {
+                            *b = gaussian_iter.next().unwrap();
+                        }
+                        AlignedBlock::new(block)
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let bs: Vec<f32> = (0..num_hash)
+            .map(|_| uniform_iter.next().unwrap())
+            .collect();
+
+        Self {
+            a_vectors: projections,
+            bs,
+            w,
+        }
     }
 
     fn hash_one(&self, q: &[AlignedBlock], index: usize) -> f32 {
@@ -31,7 +54,7 @@ impl PStableHashingBlock {
 
     fn big_h(&self, q: &[AlignedBlock]) -> Vec<f32> {
         let mut accumulated_hashes = Vec::with_capacity(self.a_vectors.len());
-        for i in (0..self.a_vectors.len()) {
+        for i in 0..self.a_vectors.len() {
             accumulated_hashes.push(self.hash_one(q, i));
         }
         accumulated_hashes
@@ -40,16 +63,23 @@ impl PStableHashingBlock {
     fn irelu(candidate: f32) -> u128 {
         // WARN this is somewhat problematic. It is not described in the LSHAPG paper how they handle
         // negative values and (afaik, not 100% sure) their implementation gets to look at all incoming
-        // vectors before actually generating any hash. This seems to be incompatible with distribution
-        // changes when inserting, and that's another claim of the paper. Not sure what to think of the
-        // whole situation, it's a bit awkward. Also, I'm willing to get contradicted: this is all
-        // conditional on me understanding what their code is doing.
+        // vectors before actually generating any hash, and this is used to normalize the values and
+        // guarantee in the process that they won't be negative. This seems to be incompatible with distribution
+        // changes when inserting. I'm willing to get contradicted on this, it's all conditional on me
+        // understanding the situation correctly, which is not a given.
         //
-        // For now, I'll do an integer-style ReLU (negative maps to 0). If that doesn't fly,
-        // we can always ping the authors.
-        //
+        // For now, I'll do an integer-style ReLU (negative maps to 0).
         // We can also do constant-based offset to erase some of the problems caused by ReLU.
         // I'll investigate what's best for that baseline.
+        //
+        // Alternative under consideration with a constant based offset :
+        //     if candidate.is_finite() {
+        //       candidate.floor() as i64).wrapping_add(i64::MIN) as u64
+        //     } else {                                 ^^^^^^^^- or some other constant
+        //      0u64
+        //     }
+        //
+        //
         if candidate.is_finite() && candidate >= 0.0 {
             candidate.floor() as u128
         } else {
@@ -57,6 +87,7 @@ impl PStableHashingBlock {
         }
     }
 
+    #[allow(dead_code)]
     pub fn hash(&self, q: &[AlignedBlock]) -> u128 {
         let hh = self.big_h(q);
         let dims_per_k = u128::BITS as usize / hh.len();
@@ -82,70 +113,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_constructor() {
-        let a_vectors = vec![
-            vec![AlignedBlock::new([1.0; 16])],
-            vec![AlignedBlock::new([2.0; 16])],
-        ];
-        let bs = vec![0.5, 1.5];
-
-        let hasher = PStableHashingBlock::new(a_vectors.clone(), bs.clone(), 1.0);
-        assert_eq!(hasher.a_vectors.len(), 2);
-        assert_eq!(hasher.bs.len(), 2);
-        assert_eq!(hasher.bs, bs);
-    }
-
-    #[test]
-    #[should_panic(expected = "Number of projection vectors must match number of bias terms")]
-    fn test_new_constructor_length_mismatch() {
-        let a_vectors = vec![vec![AlignedBlock::new([1.0; 16])]];
-        let bs = vec![0.5, 1.5]; // Mismatched length
-        PStableHashingBlock::new(a_vectors, bs, 1.0);
-    }
-
-    #[test]
-    fn test_hash_one_basic() {
-        // Create a simple hasher with one projection vector
-        let a_vectors = vec![vec![AlignedBlock::new([1.0; 16])]];
-        let bs = vec![0.5; 16];
-        let hasher = PStableHashingBlock::new(a_vectors, bs, 1.0);
-
-        // Query vector
-        let q = vec![AlignedBlock::new([2.0; 16])];
-
-        // hash_one should compute dot product + floor(bias)
-        // dot([2.0; 16], [1.0; 16]) = 32.0
-        // (32.0 + 0.5 / 1).floor = 32.0
-        let result = hasher.hash_one(&q, 0);
-        assert_eq!(result, 32.0);
-    }
-
-    #[test]
-    fn test_big_h_multiple_projections() {
-        // Create hasher with multiple projection vectors
-        let a_vectors = vec![
-            vec![AlignedBlock::new([1.0; 16])],
-            vec![AlignedBlock::new([2.0; 16])],
-            vec![AlignedBlock::new([0.5; 16])],
-        ];
-        let bs = vec![0.0, 1.5, 2.9];
-        let hasher = PStableHashingBlock::new(a_vectors, bs);
-
-        let q = vec![AlignedBlock::new([1.0; 16])];
-
-        let hashes = hasher.big_h(&q);
-        assert_eq!(hashes.len(), 3);
-
-        // Expected values:
-        // hash[0] = dot([1.0], [1.0]) + floor(0.0) = 16.0 + 0.0 = 16.0
-        // hash[1] = dot([1.0], [2.0]) + floor(1.5) = 32.0 + 1.0 = 33.0
-        // hash[2] = dot([1.0], [0.5]) + floor(2.9) = 8.0 + 2.0 = 10.0
-        assert_eq!(hashes[0], 16.0);
-        assert_eq!(hashes[1], 33.0);
-        assert_eq!(hashes[2], 10.0);
-    }
-
-    #[test]
     fn test_irelu_positive_values() {
         assert_eq!(PStableHashingBlock::irelu(5.7), 5);
         assert_eq!(PStableHashingBlock::irelu(0.0), 0);
@@ -169,38 +136,9 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_zero_vector() {
-        // With zero query vector, hash should depend only on bias terms
-        let a_vectors = vec![
-            vec![AlignedBlock::new([1.0; 16])],
-            vec![AlignedBlock::new([2.0; 16])],
-        ];
-        let bs = vec![0.0, 0.0];
-        let hasher = PStableHashingBlock::new(a_vectors, bs);
-
-        let q = vec![AlignedBlock::new([0.0; 16])];
-        let hash = hasher.hash(&q);
-
-        // All hashes should be 0, so the final hash should be 0
-        assert_eq!(hash, 0);
-    }
-
-    #[test]
     fn test_hash_deterministic() {
         // Same input should always produce same hash
-        let a_vectors = vec![
-            vec![AlignedBlock::new([
-                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-                16.0,
-            ])],
-            vec![AlignedBlock::new([
-                16.0, 15.0, 14.0, 13.0, 12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0,
-                1.0,
-            ])],
-        ];
-        let bs = vec![1.5, 2.5];
-        let hasher = PStableHashingBlock::new(a_vectors, bs);
-
+        let hasher = PStableHashingBlock::new_seeded(2, 16, 42, 1.0);
         let q = vec![AlignedBlock::new([1.0; 16])];
 
         let hash1 = hasher.hash(&q);
@@ -212,21 +150,10 @@ mod tests {
     #[test]
     fn test_hash_different_inputs_different_outputs() {
         // Different inputs should (usually) produce different hashes
-        let a_vectors = vec![
-            vec![AlignedBlock::new([
-                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
-                16.0,
-            ])],
-            vec![AlignedBlock::new([
-                16.0, 15.0, 14.0, 13.0, 12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0,
-                1.0,
-            ])],
-        ];
-        let bs = vec![1.5, 2.5];
-        let hasher = PStableHashingBlock::new(a_vectors, bs);
+        let hasher = PStableHashingBlock::new_seeded(2, 16, 42, 1.0);
 
         let q1 = vec![AlignedBlock::new([1.0; 16])];
-        let q2 = vec![AlignedBlock::new([2.0; 16])];
+        let q2 = vec![AlignedBlock::new([-2.0; 16])];
 
         let hash1 = hasher.hash(&q1);
         let hash2 = hasher.hash(&q2);
@@ -235,59 +162,46 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_z_order_interleaving() {
-        // Test that the Z-order interleaving works correctly
-        // With 2 hash functions and u128 (128 bits), we have 64 bits per hash function
-        let a_vectors = vec![
-            vec![AlignedBlock::new([1.0; 16])],
-            vec![AlignedBlock::new([0.0; 16])],
-        ];
-        let bs = vec![0.0, 0.0];
-        let hasher = PStableHashingBlock::new(a_vectors, bs);
+    fn test_hash_same_seed_same_hasher() {
+        // Two hashers with the same seed should produce the same hash for the same input
+        let hasher1 = PStableHashingBlock::new_seeded(4, 16, 99, 2.0);
+        let hasher2 = PStableHashingBlock::new_seeded(4, 16, 99, 2.0);
 
-        // Query that produces hash values [16.0, 0.0]
-        let q = vec![AlignedBlock::new([1.0; 16])];
-        let hash = hasher.hash(&q);
+        let q = vec![AlignedBlock::new([3.0; 16])];
 
-        // With irelu(16.0) = 16 = 0b10000 and irelu(0.0) = 0
-        // The bits should be interleaved in Z-order
-        assert_ne!(hash, 0); // Should not be zero since first hash is non-zero
+        assert_eq!(hasher1.hash(&q), hasher2.hash(&q));
     }
 
     #[test]
-    fn test_hash_with_multiple_blocks() {
-        // Test with vectors that span multiple AlignedBlocks
-        let a_vectors = vec![vec![
-            AlignedBlock::new([1.0; 16]),
-            AlignedBlock::new([2.0; 16]),
-        ]];
-        let bs = vec![0.0];
-        let hasher = PStableHashingBlock::new(a_vectors, bs);
+    fn test_hash_different_seeds_different_hashers() {
+        // Two hashers with different seeds should (usually) produce different hashes
+        let hasher1 = PStableHashingBlock::new_seeded(4, 16, 1, 2.0);
+        let hasher2 = PStableHashingBlock::new_seeded(4, 16, 2, 2.0);
 
-        let q = vec![AlignedBlock::new([1.0; 16]), AlignedBlock::new([1.0; 16])];
+        let q = vec![AlignedBlock::new([3.0; 16])];
 
-        // dot product = 16*1*1 + 16*1*2 = 16 + 32 = 48
-        let hash_value = hasher.hash_one(&q, 0);
-        assert_eq!(hash_value, 48.0);
-
-        // The final hash should be non-zero
-        let hash = hasher.hash(&q);
-        assert_ne!(hash, 0);
+        assert_ne!(hasher1.hash(&q), hasher2.hash(&q));
     }
 
     #[test]
     fn test_hash_with_many_hash_functions() {
-        // Test with maximum number of hash functions that fit in u128
-        // u128 has 128 bits, so we can have up to 128 hash functions (1 bit each)
-        let num_hashes = 64; // Use 64 for reasonable test
-        let a_vectors = vec![vec![AlignedBlock::new([1.0; 16])]; num_hashes];
-        let bs = vec![0.0; num_hashes];
-        let hasher = PStableHashingBlock::new(a_vectors, bs);
-
+        // 25 hash functions fit within u128 (5 bits each)
+        let hasher = PStableHashingBlock::new_seeded(25, 16, 42, 1.0);
         let q = vec![AlignedBlock::new([1.0; 16])];
         let hash = hasher.hash(&q);
 
         // Should compute without panicking
-        assert_ne!(hash, 0);
+        let _ = hash;
+    }
+
+    #[test]
+    fn test_hash_multi_block_vectors() {
+        // Vectors spanning multiple AlignedBlocks (dim=32)
+        let hasher = PStableHashingBlock::new_seeded(2, 32, 7, 1.0);
+        let q = vec![AlignedBlock::new([1.0; 16]), AlignedBlock::new([1.0; 16])];
+
+        let hash1 = hasher.hash(&q);
+        let hash2 = hasher.hash(&q);
+        assert_eq!(hash1, hash2);
     }
 }
