@@ -159,6 +159,10 @@ where
             catapult_set.write().unwrap().clear();
         }
     }
+
+    pub fn starting_node(&self) -> NodeId {
+        self.starting_node
+    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use crate::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
     search::{
-        AdjacencyGraph, Node, NodeId,
+        AdjacencyGraph, Node, NodeId, RunningMode,
         graph_algo::{FlatCatapultChoice, FlatSearch},
         hash_start::{EngineStarter, EngineStarterParams},
     },
@@ -155,7 +155,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         payload_path: PathBuf,
         num_hash: usize,
         seed: u64,
-        enabled_catapults: bool,
+        running_mode: RunningMode,
     ) -> Self {
         let mut graph_file = BufReader::new(File::open(graph_path).expect("FNF")).bytes();
         let mut payload_file = BufReader::new(File::open(payload_path).expect("FNF")).bytes();
@@ -205,13 +205,19 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         // Determine plane_dim from the first node's payload
         let plane_dim = adjacency[0].payload.len() * SIMD_LANECOUNT;
 
-        let engine_params =
-            EngineStarterParams::new(num_hash, plane_dim, entry_point_id, seed, enabled_catapults);
+        let engine_params = EngineStarterParams::new(
+            num_hash,
+            plane_dim,
+            entry_point_id,
+            seed,
+            running_mode == RunningMode::Catapult,
+        );
 
         AdjacencyGraph::new_flat(
             adjacency,
             EngineStarter::<T>::new(engine_params),
-            FlatCatapultChoice::from_bool(enabled_catapults),
+            FlatCatapultChoice::from_bool(running_mode == RunningMode::Catapult),
+            None,
         )
     }
 }
@@ -219,7 +225,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        search::{AdjacencyGraph, graph_algo::FlatSearch},
+        search::{AdjacencyGraph, RunningMode::Catapult, graph_algo::FlatSearch},
         sets::catapults::FifoSet,
     };
 
@@ -231,17 +237,17 @@ mod tests {
         let graphed1 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
-            4,    // num_hash
-            42,   // seed
-            true, // enabled_catapults
+            4,        // num_hash
+            42,       // seed
+            Catapult, // enabled_catapults
         );
 
         let graphed2 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
-            4,     // num_hash
-            42,    // seed
-            false, // enabled_catapults
+            4,        // num_hash
+            42,       // seed
+            Catapult, // enabled_catapults
         );
 
         assert!(graphed1.len() == 4);

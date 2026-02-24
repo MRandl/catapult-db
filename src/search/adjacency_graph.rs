@@ -5,7 +5,7 @@ use crate::{
     search::{
         NodeId,
         graph_algo::{FlatCatapultChoice, FlatSearch, GraphSearchAlgorithm},
-        hash_start::EngineStarter,
+        hash_start::{EngineStarter, StartingPoints, zorder_index::ZOrderIndex},
         node::Node,
     },
     sets::{
@@ -46,6 +46,7 @@ where
     adjacency: Vec<Node<Algo::FixedSetType>>,
     starter: Algo::StartingPointSelector<EvictPolicy>,
     catapults: Algo::CatapultChoice,
+    lshapg: Option<ZOrderIndex>,
 }
 
 impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
@@ -65,11 +66,13 @@ where
         adj: Vec<Node<FlatFixedSet>>,
         engine: EngineStarter<EvictPolicy>,
         catapults: FlatCatapultChoice,
+        lshapg: Option<ZOrderIndex>,
     ) -> Self {
         Self {
             adjacency: adj,
             starter: engine,
             catapults,
+            lshapg,
         }
     }
 }
@@ -243,8 +246,15 @@ where
         beam_width: usize,
         stats: &mut Stats,
     ) -> Vec<CandidateEntry> {
-        let hash_search = self.starter.select_starting_points(query);
-        let signature = hash_search.signature;
+        let hash_search = if let Some(lsh_apg) = &self.lshapg {
+            StartingPoints {
+                signature: 0,
+                catapults: lsh_apg.query_k_closest(query, 4 * k),
+                starting_node: self.starter.starting_node(),
+            }
+        } else {
+            self.starter.select_starting_points(query)
+        };
 
         // Convert catapults to candidate entries (marked as having catapult ancestry)
         let mut distances = self.distances_from_indices(&hash_search.catapults, query, true, stats);
@@ -257,8 +267,9 @@ where
         let search_results = self.beam_search_raw(query, &distances, k, beam_width, stats);
         let best_result = search_results[0].index;
 
-        if self.catapults.local_enabled() {
-            self.starter.new_catapult(signature, best_result);
+        if self.catapults.local_enabled() && self.lshapg.is_none() {
+            self.starter
+                .new_catapult(hash_search.signature, best_result);
             if search_results.iter().any(|e| e.has_catapult_ancestor) {
                 stats.bump_searches_with_catapults();
             }
@@ -344,7 +355,7 @@ mod tests {
             42,
             catapults_enabled,
         );
-        AdjacencyGraph::new_flat(nodes, EngineStarter::new(params), catapult_choice)
+        AdjacencyGraph::new_flat(nodes, EngineStarter::new(params), catapult_choice, None)
     }
 
     #[test]
@@ -452,6 +463,7 @@ mod tests {
             nodes,
             TestEngineStarter::new(params),
             FlatCatapultChoice::CatapultsEnabled,
+            None,
         );
         let query = vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])];
         let k = 2;
@@ -505,6 +517,7 @@ mod tests {
             nodes,
             TestEngineStarter::new(params),
             FlatCatapultChoice::CatapultsEnabled,
+            None,
         );
         let query = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])];
         let k = 1;

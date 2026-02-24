@@ -11,6 +11,7 @@ pub struct PStableHashingBlock {
 }
 
 impl PStableHashingBlock {
+    #[allow(dead_code)]
     pub fn new_seeded(num_hash: usize, stored_vectors_dim: usize, seed: u64, w: f32) -> Self {
         let rng1 = StdRng::seed_from_u64(seed);
         let rng2 = StdRng::seed_from_u64(u64::MAX ^ seed);
@@ -68,13 +69,16 @@ impl PStableHashingBlock {
         // changes when inserting. I'm willing to get contradicted on this, it's all conditional on me
         // understanding the situation correctly, which is not a given.
         //
-        // For now, I'll do an integer-style ReLU (negative maps to 0).
+        // For now, I'll do an integer-style ReLU (negative maps to 0). Values too large will overflow
+        // with a discontinuity in the bucket neighborhood, which kills neighbor discovery around
+        // the non-continuous point, but that is not a correctness issue, only a performance one.
+        //
         // We can also do constant-based offset to erase some of the problems caused by ReLU.
         // I'll investigate what's best for that baseline.
         //
         // Alternative under consideration with a constant based offset :
         //     if candidate.is_finite() {
-        //       candidate.floor() as i64).wrapping_add(i64::MIN) as u64
+        //       candidate.floor() as i64).wrapping_add(16) as u64
         //     } else {                                 ^^^^^^^^- or some other constant
         //      0u64
         //     }

@@ -16,6 +16,8 @@ pub mod hash_start;
 
 mod adjacency_graph;
 mod node;
+mod running_mode;
 
 pub use adjacency_graph::*;
 pub use node::*;
+pub use running_mode::*;

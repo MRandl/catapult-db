@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 use std::ops::Bound;
 
+use crate::numerics::AlignedBlock;
 use crate::search::NodeId;
+use crate::search::hash_start::pstable_hasher::PStableHashingBlock;
 
 /// An ordered index of Z-order (Morton-coded) u128 hash signatures mapping to node IDs.
 ///
@@ -18,12 +20,14 @@ use crate::search::NodeId;
 /// not perfectly, but it is the standard approximation used in LSHAPG-style indices.
 pub struct ZOrderIndex {
     tree: BTreeMap<u128, Vec<NodeId>>,
+    hasher: PStableHashingBlock,
 }
 
 impl ZOrderIndex {
-    pub fn new() -> Self {
+    pub fn new(num_hash: usize, stored_vectors_dim: usize, seed: u64, w: f32) -> Self {
         Self {
             tree: BTreeMap::new(),
+            hasher: PStableHashingBlock::new_seeded(num_hash, stored_vectors_dim, seed, w),
         }
     }
 
@@ -37,14 +41,14 @@ impl ZOrderIndex {
         (a ^ b).leading_zeros()
     }
 
-    /// Return up to `k` [`NodeId`]s whose signatures have the greatest LLCP with `target`.
+    /// Return up to `k` [`NodeId`]s whose signatures have the greatest LLCP with `target_signature`.
     ///
-    /// The search starts at the first key >= `target` and expands bidirectionally,
+    /// The search starts at the first key >= `target_signature` and expands bidirectionally,
     /// always consuming whichever side (left or right) has the better (longer) LLCP
-    /// with `target` next. Ties are broken by taking the right side first.
+    /// with `target_signature` next. Ties are broken by taking the right side first.
     ///
     /// Returns fewer than `k` entries if the index contains fewer.
-    pub fn query_k_closest(&self, target: u128, k: usize) -> Vec<NodeId> {
+    fn query_k_closest_by_signature(&self, target_signature: u128, k: usize) -> Vec<NodeId> {
         if k == 0 || self.tree.is_empty() {
             return Vec::new();
         }
@@ -54,11 +58,11 @@ impl ZOrderIndex {
         // Build two iterators: one going right (>= target), one going left (< target).
         let mut right = self
             .tree
-            .range((Bound::Included(target), Bound::Unbounded))
+            .range((Bound::Included(target_signature), Bound::Unbounded))
             .peekable();
         let mut left = self
             .tree
-            .range((Bound::Unbounded, Bound::Excluded(target)))
+            .range((Bound::Unbounded, Bound::Excluded(target_signature)))
             .rev()
             .peekable();
 
@@ -67,8 +71,12 @@ impl ZOrderIndex {
                 break;
             }
 
-            let right_llcp = right.peek().map(|&(&sig, _)| Self::llcp(target, sig));
-            let left_llcp = left.peek().map(|&(&sig, _)| Self::llcp(target, sig));
+            let right_llcp = right
+                .peek()
+                .map(|&(&sig, _)| Self::llcp(target_signature, sig));
+            let left_llcp = left
+                .peek()
+                .map(|&(&sig, _)| Self::llcp(target_signature, sig));
 
             // Pick whichever side has the longer common prefix; prefer right on tie.
             let take_right = match (right_llcp, left_llcp) {
@@ -78,11 +86,8 @@ impl ZOrderIndex {
                 (Some(r), Some(l)) => r >= l,
             };
 
-            let iter: &mut dyn Iterator<Item = (&u128, &Vec<NodeId>)> = if take_right {
-                &mut right
-            } else {
-                &mut left
-            };
+            let iter: &mut dyn Iterator<Item = (&u128, &Vec<NodeId>)> =
+                if take_right { &mut right } else { &mut left };
 
             if let Some((_, nodes)) = iter.next() {
                 for &node in nodes {
@@ -96,11 +101,13 @@ impl ZOrderIndex {
 
         result
     }
-}
 
-impl Default for ZOrderIndex {
-    fn default() -> Self {
-        Self::new()
+    /// Return up to `k` [`NodeId`]s whose signatures have the greatest LLCP with `target_vec`.
+    ///
+    /// Hashes `target_vec` and delegates to [`Self::query_k_closest_by_signature`].
+    pub fn query_k_closest(&self, target_vec: &[AlignedBlock], k: usize) -> Vec<NodeId> {
+        let target_signature = self.hasher.hash(target_vec);
+        self.query_k_closest_by_signature(target_signature, k)
     }
 }
 
@@ -112,34 +119,38 @@ mod tests {
         NodeId { internal: id }
     }
 
+    fn new_for_test() -> ZOrderIndex {
+        ZOrderIndex::new(1, 16, 0, 1.0)
+    }
+
     #[test]
     fn test_empty_index_returns_empty() {
-        let idx = ZOrderIndex::new();
-        assert!(idx.query_k_closest(42, 5).is_empty());
+        let idx = new_for_test();
+        assert!(idx.query_k_closest_by_signature(42, 5).is_empty());
     }
 
     #[test]
     fn test_k_zero_returns_empty() {
-        let mut idx = ZOrderIndex::new();
+        let mut idx = new_for_test();
         idx.insert(10, node(1));
-        assert!(idx.query_k_closest(10, 0).is_empty());
+        assert!(idx.query_k_closest_by_signature(10, 0).is_empty());
     }
 
     #[test]
     fn test_single_entry_always_returned() {
-        let mut idx = ZOrderIndex::new();
+        let mut idx = new_for_test();
         idx.insert(0x1234, node(7));
-        let result = idx.query_k_closest(0x1234, 3);
+        let result = idx.query_k_closest_by_signature(0x1234, 3);
         assert_eq!(result, vec![node(7)]);
     }
 
     #[test]
     fn test_exact_match_returned_first() {
-        let mut idx = ZOrderIndex::new();
+        let mut idx = new_for_test();
         idx.insert(100, node(1));
         idx.insert(200, node(2));
         idx.insert(100, node(3)); // second node at same key
-        let result = idx.query_k_closest(100, 5);
+        let result = idx.query_k_closest_by_signature(100, 5);
         // Both nodes at key 100 should come back, and before node 2
         assert!(result.contains(&node(1)));
         assert!(result.contains(&node(3)));
@@ -178,30 +189,30 @@ mod tests {
         let near: u128 = 0b1001;
         let far: u128 = 0b0000;
 
-        let mut idx = ZOrderIndex::new();
+        let mut idx = new_for_test();
         idx.insert(near, node(1));
         idx.insert(far, node(2));
 
-        let result = idx.query_k_closest(target, 1);
+        let result = idx.query_k_closest_by_signature(target, 1);
         assert_eq!(result, vec![node(1)]);
     }
 
     #[test]
     fn test_returns_at_most_k_results() {
-        let mut idx = ZOrderIndex::new();
+        let mut idx = new_for_test();
         for i in 0..20u128 {
             idx.insert(i, node(i as usize));
         }
-        let result = idx.query_k_closest(10, 5);
+        let result = idx.query_k_closest_by_signature(10, 5);
         assert_eq!(result.len(), 5);
     }
 
     #[test]
     fn test_returns_all_when_fewer_than_k() {
-        let mut idx = ZOrderIndex::new();
+        let mut idx = new_for_test();
         idx.insert(1, node(1));
         idx.insert(2, node(2));
-        let result = idx.query_k_closest(1, 100);
+        let result = idx.query_k_closest_by_signature(1, 100);
         assert_eq!(result.len(), 2);
     }
 
@@ -210,13 +221,13 @@ mod tests {
         // target = 8; keys at 7 (left) and 9 (right) both have LLCP 125 with 8.
         // Both should appear in a k=2 query before more distant keys.
         let target: u128 = 8;
-        let mut idx = ZOrderIndex::new();
+        let mut idx = new_for_test();
         idx.insert(7, node(7));
         idx.insert(9, node(9));
         idx.insert(0, node(0)); // far left
         idx.insert(255, node(255)); // far right
 
-        let result = idx.query_k_closest(target, 2);
+        let result = idx.query_k_closest_by_signature(target, 2);
         assert_eq!(result.len(), 2);
         assert!(result.contains(&node(7)) || result.contains(&node(9)));
         assert!(!result.contains(&node(0)));
@@ -225,11 +236,11 @@ mod tests {
 
     #[test]
     fn test_target_not_in_index_still_works() {
-        let mut idx = ZOrderIndex::new();
+        let mut idx = new_for_test();
         idx.insert(10, node(10));
         idx.insert(20, node(20));
         // target 15 is between them
-        let result = idx.query_k_closest(15, 2);
+        let result = idx.query_k_closest_by_signature(15, 2);
         assert_eq!(result.len(), 2);
     }
 }

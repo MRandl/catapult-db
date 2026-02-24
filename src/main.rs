@@ -1,7 +1,7 @@
 use catapult::{
     fs::Queries,
     numerics::AlignedBlock,
-    search::{AdjacencyGraph, graph_algo::FlatSearch},
+    search::{AdjacencyGraph, RunningMode, graph_algo::FlatSearch},
     sets::catapults::FifoSet,
     statistics::Stats,
 };
@@ -56,8 +56,8 @@ struct Args {
     payload: String,
 
     /// Whethere catapults should be used or not
-    #[arg(short, long)]
-    catapults: bool,
+    #[arg(short, long, value_parser = clap::builder::PossibleValuesParser::new(["vanilla", "catapult", "lshapg"]))]
+    mode: String,
 
     /// Number of threads to use for parallel search (comma-separated list, e.g., "1,2,4,8")
     #[arg(short, long, value_delimiter = ',')]
@@ -262,7 +262,7 @@ fn main() {
                 PathBuf::from_str(&args.payload).unwrap(),
                 16, // num_hash
                 seed,
-                args.catapults,
+                RunningMode::from_string(&args.mode),
             ),
         );
         let graph_size = full_graph.len();
@@ -279,7 +279,7 @@ fn main() {
                     num_threads,
                     beam_width,
                     args.num_neighbors,
-                    args.catapults,
+                    RunningMode::from_string(&args.mode) == RunningMode::Catapult,
                     seed,
                 );
                 all_results.push(result);
