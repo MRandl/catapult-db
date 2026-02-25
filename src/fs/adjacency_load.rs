@@ -3,7 +3,7 @@ use crate::{
     search::{
         AdjacencyGraph, Node, NodeId, RunningMode,
         graph_algo::{FlatCatapultChoice, FlatSearch},
-        hash_start::{EngineStarter, EngineStarterParams},
+        hash_start::{EngineStarter, EngineStarterParams, zorder_index::ZOrderIndex},
     },
     sets::{catapults::CatapultEvictingStructure, fixed::FlatFixedSet},
 };
@@ -12,6 +12,7 @@ use std::{
     fs::File,
     io::{BufReader, Error, Read},
     path::PathBuf,
+    vec,
 };
 
 impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
@@ -213,11 +214,21 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
             running_mode == RunningMode::Catapult,
         );
 
+        let lshapg = if running_mode == RunningMode::LshApg {
+            let mut index = ZOrderIndex::new(num_hash, plane_dim, seed, 0.3);
+            for (i, vector) in adjacency.iter().enumerate() {
+                index.insert(&vector.payload, NodeId { internal: i });
+            }
+            Some(index)
+        } else {
+            None
+        };
+
         AdjacencyGraph::new_flat(
             adjacency,
             EngineStarter::<T>::new(engine_params),
             FlatCatapultChoice::from_bool(running_mode == RunningMode::Catapult),
-            None,
+            lshapg,
         )
     }
 }
