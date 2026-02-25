@@ -32,8 +32,9 @@ impl ZOrderIndex {
     }
 
     /// Insert `node` under `signature`. Multiple nodes may share the same signature.
-    pub fn insert(&mut self, signature: u128, node: NodeId) {
-        self.tree.entry(signature).or_default().push(node);
+    pub fn insert(&mut self, key: &[AlignedBlock], node: NodeId) {
+        let target_signature = self.hasher.hash(key);
+        self.tree.entry(target_signature).or_default().push(node);
     }
 
     /// Return the LLCP (number of shared leading bits) between two signatures.
@@ -114,6 +115,7 @@ impl ZOrderIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::numerics::AlignedBlock;
 
     fn node(id: usize) -> NodeId {
         NodeId { internal: id }
@@ -123,42 +125,46 @@ mod tests {
         ZOrderIndex::new(1, 16, 0, 1.0)
     }
 
+    /// Build a 1-block vector with all 16 lanes set to `val`.
+    fn vec_of(val: f32) -> Vec<AlignedBlock> {
+        AlignedBlock::allocate_padded(vec![val; 16])
+    }
+
     #[test]
     fn test_empty_index_returns_empty() {
         let idx = new_for_test();
-        assert!(idx.query_k_closest_by_signature(42, 5).is_empty());
+        assert!(idx.query_k_closest(&vec_of(0.0), 5).is_empty());
     }
 
     #[test]
     fn test_k_zero_returns_empty() {
         let mut idx = new_for_test();
-        idx.insert(10, node(1));
-        assert!(idx.query_k_closest_by_signature(10, 0).is_empty());
+        idx.insert(&vec_of(1.0), node(1));
+        assert!(idx.query_k_closest(&vec_of(1.0), 0).is_empty());
     }
 
     #[test]
     fn test_single_entry_always_returned() {
         let mut idx = new_for_test();
-        idx.insert(0x1234, node(7));
-        let result = idx.query_k_closest_by_signature(0x1234, 3);
+        let v = vec_of(1.0);
+        idx.insert(&v, node(7));
+        let result = idx.query_k_closest(&v, 3);
         assert_eq!(result, vec![node(7)]);
     }
 
     #[test]
-    fn test_exact_match_returned_first() {
+    fn test_same_vector_inserted_twice_both_returned() {
         let mut idx = new_for_test();
-        idx.insert(100, node(1));
-        idx.insert(200, node(2));
-        idx.insert(100, node(3)); // second node at same key
-        let result = idx.query_k_closest_by_signature(100, 5);
-        // Both nodes at key 100 should come back, and before node 2
+        let v1 = vec_of(1.0);
+        let v2 = vec_of(2.0);
+        let v_query = vec_of(1.0);
+        idx.insert(&v1, node(1));
+        idx.insert(&v2, node(2));
+        idx.insert(&v1, node(3)); // second node at same key as v1
+        let result = idx.query_k_closest(&v_query, 5);
+        // Both nodes at the v1 key should come back
         assert!(result.contains(&node(1)));
         assert!(result.contains(&node(3)));
-        let pos1 = result.iter().position(|&n| n == node(1)).unwrap();
-        let pos2 = result.iter().position(|&n| n == node(2)).unwrap();
-        assert!(pos1 < pos2);
-        let pos3 = result.iter().position(|&n| n == node(3)).unwrap();
-        assert!(pos3 < pos2);
     }
 
     #[test]
@@ -183,64 +189,47 @@ mod tests {
     }
 
     #[test]
-    fn test_closer_signature_preferred() {
-        // target = 0b1000, near = 0b1001 (LLCP 127), far = 0b0000 (LLCP 0)
-        let target: u128 = 0b1000;
-        let near: u128 = 0b1001;
-        let far: u128 = 0b0000;
-
-        let mut idx = new_for_test();
-        idx.insert(near, node(1));
-        idx.insert(far, node(2));
-
-        let result = idx.query_k_closest_by_signature(target, 1);
-        assert_eq!(result, vec![node(1)]);
-    }
-
-    #[test]
     fn test_returns_at_most_k_results() {
         let mut idx = new_for_test();
-        for i in 0..20u128 {
-            idx.insert(i, node(i as usize));
+        for i in 0..20 {
+            idx.insert(&vec_of(i as f32), node(i));
         }
-        let result = idx.query_k_closest_by_signature(10, 5);
+        let result = idx.query_k_closest(&vec_of(10.0), 5);
         assert_eq!(result.len(), 5);
     }
 
     #[test]
     fn test_returns_all_when_fewer_than_k() {
         let mut idx = new_for_test();
-        idx.insert(1, node(1));
-        idx.insert(2, node(2));
-        let result = idx.query_k_closest_by_signature(1, 100);
+        idx.insert(&vec_of(1.0), node(1));
+        idx.insert(&vec_of(2.0), node(2));
+        let result = idx.query_k_closest(&vec_of(1.0), 100);
         assert_eq!(result.len(), 2);
     }
 
     #[test]
-    fn test_bidirectional_expansion() {
-        // target = 8; keys at 7 (left) and 9 (right) both have LLCP 125 with 8.
-        // Both should appear in a k=2 query before more distant keys.
-        let target: u128 = 8;
+    fn test_query_vector_not_in_index_still_works() {
         let mut idx = new_for_test();
-        idx.insert(7, node(7));
-        idx.insert(9, node(9));
-        idx.insert(0, node(0)); // far left
-        idx.insert(255, node(255)); // far right
-
-        let result = idx.query_k_closest_by_signature(target, 2);
+        idx.insert(&vec_of(1.0), node(1));
+        idx.insert(&vec_of(2.0), node(2));
+        // query with a vector not inserted
+        let result = idx.query_k_closest(&vec_of(1.5), 2);
         assert_eq!(result.len(), 2);
-        assert!(result.contains(&node(7)) || result.contains(&node(9)));
-        assert!(!result.contains(&node(0)));
-        assert!(!result.contains(&node(255)));
     }
 
     #[test]
-    fn test_target_not_in_index_still_works() {
-        let mut idx = new_for_test();
-        idx.insert(10, node(10));
-        idx.insert(20, node(20));
-        // target 15 is between them
-        let result = idx.query_k_closest_by_signature(15, 2);
-        assert_eq!(result.len(), 2);
+    pub fn test_1000_index() {
+        let mut idx = ZOrderIndex::new(10, 16, 42, 1.0);
+
+        for i in 0..10000 {
+            idx.insert(&[AlignedBlock::new([i as f32; 16])], NodeId { internal: i });
+        }
+
+        let queried = idx.query_k_closest(&[AlignedBlock::new([5000.5; 16])], 5);
+
+        // looking for the five closest known vectors in the area of 5000.5 should return a bunch
+        // of vectors, including id 5000 and 5001
+        assert!(queried.contains(&NodeId { internal: 5000 }));
+        assert!(queried.contains(&NodeId { internal: 5001 }));
     }
 }
