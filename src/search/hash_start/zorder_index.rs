@@ -23,6 +23,8 @@ pub struct ZOrderIndex {
     hasher: PStableHashingBlock,
 }
 
+pub const LSH_APG_REDUNDANCY: usize = 1;
+
 impl ZOrderIndex {
     pub fn new(num_hash: usize, stored_vectors_dim: usize, seed: u64, w: f32) -> Self {
         Self {

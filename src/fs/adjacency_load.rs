@@ -3,7 +3,10 @@ use crate::{
     search::{
         AdjacencyGraph, Node, NodeId, RunningMode,
         graph_algo::{FlatCatapultChoice, FlatSearch},
-        hash_start::{EngineStarter, EngineStarterParams, zorder_index::ZOrderIndex},
+        hash_start::{
+            EngineStarter, EngineStarterParams,
+            zorder_index::{LSH_APG_REDUNDANCY, ZOrderIndex},
+        },
     },
     sets::{catapults::CatapultEvictingStructure, fixed::FlatFixedSet},
 };
@@ -217,18 +220,11 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         );
 
         let lshapg = if running_mode == RunningMode::LshApg {
-            let w = 2.0;
-            let mut index = [
-                ZOrderIndex::new(num_hash, plane_dim, seed, w),
-                ZOrderIndex::new(num_hash, plane_dim, seed + 1, w),
-                ZOrderIndex::new(num_hash, plane_dim, seed + 2, w),
-                ZOrderIndex::new(num_hash, plane_dim, seed + 3, w),
-            ];
+            let w = 1.0;
+            let mut index: [ZOrderIndex; LSH_APG_REDUNDANCY] =
+                [ZOrderIndex::new(num_hash, plane_dim, seed, w)];
             for (i, vector) in adjacency.iter().enumerate() {
                 index[0].insert(&vector.payload, NodeId { internal: i });
-                index[1].insert(&vector.payload, NodeId { internal: i });
-                index[2].insert(&vector.payload, NodeId { internal: i });
-                index[3].insert(&vector.payload, NodeId { internal: i });
             }
             Some(index)
         } else {

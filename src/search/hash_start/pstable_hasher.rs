@@ -76,7 +76,7 @@ impl PStableHashingBlock {
         // We can also do constant-based offset to erase some of the problems caused by ReLU.
         // I'll investigate what's best for that baseline.
         if candidate.is_finite() {
-            let shifted_candidate = candidate.floor() + 20.;
+            let shifted_candidate = candidate.floor() + 0.; // ihave evaluated some offsets, 0 is the best so far
             if shifted_candidate >= 0.0 {
                 shifted_candidate as u128
             } else {

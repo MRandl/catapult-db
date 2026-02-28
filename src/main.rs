@@ -264,7 +264,7 @@ fn main() {
     // Load the queries
     eprintln!("Loading queries...");
     let queries: Vec<Vec<AlignedBlock>> =
-        Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries, Some(15000));
+        Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries, Some(450_000));
 
     let queries = Arc::new(queries);
 

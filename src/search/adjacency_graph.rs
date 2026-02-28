@@ -5,7 +5,10 @@ use crate::{
     search::{
         NodeId,
         graph_algo::{FlatCatapultChoice, FlatSearch, GraphSearchAlgorithm},
-        hash_start::{EngineStarter, StartingPoints, zorder_index::ZOrderIndex},
+        hash_start::{
+            EngineStarter, StartingPoints,
+            zorder_index::{LSH_APG_REDUNDANCY, ZOrderIndex},
+        },
         node::Node,
     },
     sets::{
@@ -46,7 +49,7 @@ where
     adjacency: Vec<Node<Algo::FixedSetType>>,
     starter: Algo::StartingPointSelector<EvictPolicy>,
     catapults: Algo::CatapultChoice,
-    lshapg: Option<[ZOrderIndex; 4]>,
+    lshapg: Option<[ZOrderIndex; LSH_APG_REDUNDANCY]>,
 }
 
 impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
@@ -66,7 +69,7 @@ where
         adj: Vec<Node<FlatFixedSet>>,
         engine: EngineStarter<EvictPolicy>,
         catapults: FlatCatapultChoice,
-        lshapg: Option<[ZOrderIndex; 4]>,
+        lshapg: Option<[ZOrderIndex; LSH_APG_REDUNDANCY]>,
     ) -> Self {
         Self {
             adjacency: adj,
