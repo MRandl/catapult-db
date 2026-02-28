@@ -2,7 +2,7 @@ use catapult::{
     fs::Queries,
     numerics::AlignedBlock,
     search::{AdjacencyGraph, RunningMode, graph_algo::FlatSearch},
-    sets::{candidates::CandidateEntry, catapults::FifoSet},
+    sets::catapults::FifoSet,
     statistics::Stats,
 };
 use clap::Parser;
@@ -20,13 +20,6 @@ use std::{
 
 const NUM_HASH: usize = 8;
 const BUCKET_SIZE: usize = 40;
-
-/// JSON output structures
-#[derive(Serialize, Deserialize, Debug)]
-struct NeighborEntry {
-    index: usize,
-    distance: f32,
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SearchJobResult {
@@ -47,7 +40,7 @@ struct SearchJobResult {
     avg_catapults_added: Option<f64>,
     /// Per-query neighbors in query order, present only when --output-neighbors is set
     #[serde(skip_serializing_if = "Option::is_none")]
-    neighbors: Option<Vec<Vec<NeighborEntry>>>,
+    neighbors: Option<Vec<Vec<usize>>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -80,10 +73,6 @@ struct Args {
     #[arg(short, long, value_delimiter = ',')]
     threads: Vec<usize>,
 
-    /// Number of neighbors to return for each query
-    #[arg(long)]
-    num_neighbors: usize,
-
     /// Width for beam search (comma-separated list, e.g., "10,20,40")
     #[arg(long, value_delimiter = ',')]
     beam_width: Vec<usize>,
@@ -106,7 +95,6 @@ fn run_search_job(
     queries: Arc<Vec<Vec<AlignedBlock>>>,
     num_threads: usize,
     beam_width: usize,
-    num_neighbors: usize,
     catapults_enabled: bool,
     seed: u64,
     bucket_capacity: usize,
@@ -132,7 +120,7 @@ fn run_search_job(
             let next_batch_clone = Arc::clone(&next_batch);
 
             thread::spawn(move || {
-                let mut local_results: Vec<(usize, Vec<CandidateEntry>)> = Vec::new();
+                let mut local_results: Vec<(usize, Vec<usize>)> = Vec::new();
                 let mut local_stats = Stats::new();
 
                 loop {
@@ -150,11 +138,14 @@ fn run_search_job(
                     {
                         let result = black_box(graph.beam_search(
                             query,
-                            num_neighbors,
+                            beam_width,
                             beam_width,
                             &mut local_stats,
                         ));
-                        local_results.push((batch_start + offset, result));
+                        local_results.push((
+                            batch_start + offset,
+                            result.iter().map(|e| e.index.internal).collect(),
+                        ));
                     }
                 }
 
@@ -163,7 +154,7 @@ fn run_search_job(
         })
         .collect();
 
-    let mut reses: Vec<(usize, Vec<CandidateEntry>)> = Vec::with_capacity(num_queries);
+    let mut reses: Vec<(usize, Vec<usize>)> = Vec::with_capacity(num_queries);
     let mut combined_stats = Stats::new();
     for handle in handles {
         let (local_results, local_stats) = handle.join().expect("Thread panicked");
@@ -179,25 +170,10 @@ fn run_search_job(
 
     let avg_dists_computed = combined_stats.get_computed_dists() as f64 / num_queries as f64;
     let avg_nodes_visited = combined_stats.get_nodes_visited() as f64 / num_queries as f64;
-    let checksum = reses
-        .iter()
-        .map(|(_, res)| res[0].index.internal)
-        .reduce(|a, b| a + b);
+    let checksum = reses.iter().map(|(_, res)| res[0]).reduce(|a, b| a + b);
 
     let neighbors = if output_neighbors {
-        Some(
-            reses
-                .iter()
-                .map(|(_, res)| {
-                    res.iter()
-                        .map(|e| NeighborEntry {
-                            index: e.index.internal,
-                            distance: e.distance.0,
-                        })
-                        .collect()
-                })
-                .collect(),
-        )
+        Some(reses.into_iter().map(|(_, res)| res).collect())
     } else {
         None
     };
@@ -288,7 +264,7 @@ fn main() {
     // Load the queries
     eprintln!("Loading queries...");
     let queries: Vec<Vec<AlignedBlock>> =
-        Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries, None);
+        Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries, Some(15000));
 
     let queries = Arc::new(queries);
 
@@ -330,7 +306,6 @@ fn main() {
                     Arc::clone(&queries),
                     num_threads,
                     beam_width,
-                    args.num_neighbors,
                     RunningMode::from_string(&args.mode) == RunningMode::Catapult,
                     seed,
                     BUCKET_SIZE,
