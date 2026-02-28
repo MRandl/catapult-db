@@ -1,3 +1,5 @@
+use tqdm::tqdm;
+
 use crate::numerics::{AlignedBlock, SIMD_LANECOUNT};
 
 /// A trait for loading query vectors from NumPy format files.
@@ -18,7 +20,7 @@ pub trait Queries {
     /// * Panics if the .npy format is invalid
     /// * Panics if the shape is not 2-dimensional
     /// * Panics if the vector dimension is not a multiple of `SIMD_LANECOUNT`
-    fn load_from_npy(path: &str) -> Self;
+    fn load_from_npy(path: &str, limit: Option<usize>) -> Self;
 }
 
 impl Queries for Vec<Vec<AlignedBlock>> {
@@ -37,17 +39,22 @@ impl Queries for Vec<Vec<AlignedBlock>> {
     /// * Panics if the file cannot be read
     /// * Panics if the .npy data is not 2-dimensional
     /// * Panics if the vector dimension is not a multiple of `SIMD_LANECOUNT`
-    fn load_from_npy(path: &str) -> Self {
+    fn load_from_npy(path: &str, limit: Option<usize>) -> Self {
         let bytes = std::fs::read(path).unwrap();
         let npy = npyz::NpyFile::new(&bytes[..]).unwrap();
         assert!(npy.shape().len() == 2);
-        let (d1, d2) = (npy.shape()[0] as usize, npy.shape()[1] as usize);
+        let (mut d1, d2) = (npy.shape()[0] as usize, npy.shape()[1] as usize);
+        if let Some(limit) = limit
+            && limit < d1
+        {
+            d1 = limit;
+        }
 
         assert!(d2.is_multiple_of(SIMD_LANECOUNT));
 
         let mut iter = npy.data::<f32>().unwrap();
         let mut result = Vec::with_capacity(d1);
-        for _ in 0..d1 {
+        for _ in tqdm(0..d1).desc(Some("Loading .npy queries")) {
             let d2_capacity = d2 / SIMD_LANECOUNT;
             let mut row = Vec::with_capacity(d2_capacity);
             for _ in 0..d2_capacity {
@@ -70,6 +77,6 @@ mod tests {
 
     #[test]
     fn test_load_4vecs() {
-        let _ = Vec::<Vec<AlignedBlock>>::load_from_npy("test_index/vectors.npy");
+        let _ = Vec::<Vec<AlignedBlock>>::load_from_npy("test_index/vectors.npy", None);
     }
 }

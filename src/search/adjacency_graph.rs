@@ -46,7 +46,7 @@ where
     adjacency: Vec<Node<Algo::FixedSetType>>,
     starter: Algo::StartingPointSelector<EvictPolicy>,
     catapults: Algo::CatapultChoice,
-    lshapg: Option<ZOrderIndex>,
+    lshapg: Option<[ZOrderIndex; 4]>,
 }
 
 impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
@@ -66,7 +66,7 @@ where
         adj: Vec<Node<FlatFixedSet>>,
         engine: EngineStarter<EvictPolicy>,
         catapults: FlatCatapultChoice,
-        lshapg: Option<ZOrderIndex>,
+        lshapg: Option<[ZOrderIndex; 4]>,
     ) -> Self {
         Self {
             adjacency: adj,
@@ -247,9 +247,18 @@ where
         stats: &mut Stats,
     ) -> Vec<CandidateEntry> {
         let hash_search = if let Some(lsh_apg) = &self.lshapg {
+            let mut lshapg_candidates = Vec::new();
+            for candidate_set in lsh_apg
+                .iter()
+                .map(|zorder| zorder.query_k_closest(query, 4 * k))
+            {
+                lshapg_candidates.extend(candidate_set.iter());
+            }
+            lshapg_candidates.sort();
+            lshapg_candidates.dedup();
             StartingPoints {
                 signature: 0,
-                catapults: lsh_apg.query_k_closest(query, 4 * k),
+                catapults: lshapg_candidates,
                 starting_node: self.starter.starting_node(),
             }
         } else {
@@ -258,6 +267,8 @@ where
 
         // Convert catapults to candidate entries (marked as having catapult ancestry)
         let mut distances = self.distances_from_indices(&hash_search.catapults, query, true, stats);
+        distances.sort();
+        distances.shrink_to(k);
 
         // Add the starting node (not a catapult, so marked as false)
         let starting_node_entry =
@@ -306,7 +317,7 @@ mod tests {
         sets::{catapults::FifoSet, fixed::FlatFixedSet},
     };
 
-    pub type TestEngineStarter = EngineStarter<FifoSet<30>>;
+    pub type TestEngineStarter = EngineStarter<FifoSet>;
 
     use super::*;
 
@@ -314,7 +325,7 @@ mod tests {
     // Nodes: 0 (pos 0), 1 (pos 10), 2 (pos 20), 3 (pos 30), 4 (pos 40)
     // Edges: 0 -> 1 -> 2 -> 3 -> 4
     // Query: 11.0
-    fn setup_simple_graph(catapults_enabled: bool) -> AdjacencyGraph<FifoSet<30>, FlatSearch> {
+    fn setup_simple_graph(catapults_enabled: bool) -> AdjacencyGraph<FifoSet, FlatSearch> {
         let nodes = vec![
             // 0: Pos 0.0, Neighbors: [1]
             Node {
@@ -350,6 +361,7 @@ mod tests {
         // Start from node 0
         let params = EngineStarterParams::new(
             4,
+            40,
             SIMD_LANECOUNT,
             NodeId { internal: 0 },
             42,
@@ -458,7 +470,8 @@ mod tests {
             },
         ];
         // Start points: 0, 2
-        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, true);
+        let params =
+            EngineStarterParams::new(4, 40, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, true);
         let graph = AdjacencyGraph::new_flat(
             nodes,
             TestEngineStarter::new(params),
@@ -512,7 +525,8 @@ mod tests {
                 neighbors: FlatFixedSet::new(vec![]),
             },
         ];
-        let params = EngineStarterParams::new(4, SIMD_LANECOUNT, NodeId { internal: 1 }, 42, true);
+        let params =
+            EngineStarterParams::new(4, 40, SIMD_LANECOUNT, NodeId { internal: 1 }, 42, true);
         let graph = AdjacencyGraph::new_flat(
             nodes,
             TestEngineStarter::new(params),

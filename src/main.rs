@@ -2,7 +2,7 @@ use catapult::{
     fs::Queries,
     numerics::AlignedBlock,
     search::{AdjacencyGraph, RunningMode, graph_algo::FlatSearch},
-    sets::catapults::FifoSet,
+    sets::{candidates::CandidateEntry, catapults::FifoSet},
     statistics::Stats,
 };
 use clap::Parser;
@@ -11,11 +11,23 @@ use std::{
     hint::black_box,
     path::PathBuf,
     str::FromStr,
-    sync::{Arc, atomic::AtomicUsize},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     thread,
 };
 
+const NUM_HASH: [usize; 1] = [8];
+const BUCKET_SIZE: [usize; 1] = [40];
+
 /// JSON output structures
+#[derive(Serialize, Deserialize, Debug)]
+struct NeighborEntry {
+    index: usize,
+    distance: f32,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct SearchJobResult {
     seed: u64,
@@ -23,6 +35,8 @@ struct SearchJobResult {
     beam_width: usize,
     num_queries: usize,
     catapults_enabled: bool,
+    bucket_capacity: usize,
+    num_hashes: usize,
     elapsed_secs: f64,
     qps: f64,
     checksum: Option<usize>,
@@ -31,6 +45,9 @@ struct SearchJobResult {
     searches_with_catapults: Option<usize>,
     catapult_usage_pct: Option<f64>,
     avg_catapults_added: Option<f64>,
+    /// Per-query neighbors in query order, present only when --output-neighbors is set
+    #[serde(skip_serializing_if = "Option::is_none")]
+    neighbors: Option<Vec<Vec<NeighborEntry>>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -78,16 +95,23 @@ struct Args {
     /// Path to output JSON file
     #[arg(short, long)]
     output: String,
+
+    /// Include per-query neighbor results (index + distance) in the output JSON
+    #[arg(long, default_value_t = false)]
+    output_neighbors: bool,
 }
 
 fn run_search_job(
-    graph: Arc<AdjacencyGraph<FifoSet<30>, FlatSearch>>,
+    graph: Arc<AdjacencyGraph<FifoSet, FlatSearch>>,
     queries: Arc<Vec<Vec<AlignedBlock>>>,
     num_threads: usize,
     beam_width: usize,
     num_neighbors: usize,
     catapults_enabled: bool,
     seed: u64,
+    bucket_capacity: usize,
+    num_hashes: usize,
+    output_neighbors: bool,
 ) -> SearchJobResult {
     let num_queries = queries.len();
     eprintln!("\n==========");
@@ -108,13 +132,12 @@ fn run_search_job(
             let next_batch_clone = Arc::clone(&next_batch);
 
             thread::spawn(move || {
-                let mut local_results = Vec::new();
+                let mut local_results: Vec<(usize, Vec<CandidateEntry>)> = Vec::new();
                 let mut local_stats = Stats::new();
 
                 loop {
                     // Atomically grab the next batch of work
-                    let batch_start = next_batch_clone
-                        .fetch_add(batch_size, std::sync::atomic::Ordering::Relaxed);
+                    let batch_start = next_batch_clone.fetch_add(batch_size, Ordering::Relaxed);
 
                     if batch_start >= num_queries {
                         break;
@@ -123,14 +146,16 @@ fn run_search_job(
                     let batch_end = std::cmp::min(batch_start + batch_size, num_queries);
 
                     // Process this batch
-                    for query in &queries_clone[batch_start..batch_end] {
-                        let _result = black_box(graph.beam_search(
+                    for (offset, query) in
+                        queries_clone[batch_start..batch_end].iter().enumerate()
+                    {
+                        let result = black_box(graph.beam_search(
                             query,
                             num_neighbors,
                             beam_width,
                             &mut local_stats,
                         ));
-                        local_results.push(_result[0]);
+                        local_results.push((batch_start + offset, result));
                     }
                 }
 
@@ -139,7 +164,7 @@ fn run_search_job(
         })
         .collect();
 
-    let mut reses = Vec::with_capacity(num_queries);
+    let mut reses: Vec<(usize, Vec<CandidateEntry>)> = Vec::with_capacity(num_queries);
     let mut combined_stats = Stats::new();
     for handle in handles {
         let (local_results, local_stats) = handle.join().expect("Thread panicked");
@@ -147,15 +172,36 @@ fn run_search_job(
         combined_stats = combined_stats.merge(&local_stats)
     }
 
+    // Restore query order (threads may complete batches out of order)
+    reses.sort_unstable_by_key(|(idx, _)| *idx);
+
     let elapsed = start_time.elapsed();
     let total_qps = num_queries as f64 / elapsed.as_secs_f64();
 
     let avg_dists_computed = combined_stats.get_computed_dists() as f64 / num_queries as f64;
     let avg_nodes_visited = combined_stats.get_nodes_visited() as f64 / num_queries as f64;
     let checksum = reses
-        .into_iter()
-        .map(|e| e.index.internal)
+        .iter()
+        .map(|(_, res)| res[0].index.internal)
         .reduce(|a, b| a + b);
+
+    let neighbors = if output_neighbors {
+        Some(
+            reses
+                .iter()
+                .map(|(_, res)| {
+                    res.iter()
+                        .map(|e| NeighborEntry {
+                            index: e.index.internal,
+                            distance: e.distance.0,
+                        })
+                        .collect()
+                })
+                .collect(),
+        )
+    } else {
+        None
+    };
 
     let result = if catapults_enabled {
         let catapult_usage_pct = if num_queries > 0 {
@@ -183,6 +229,8 @@ fn run_search_job(
             beam_width,
             num_queries,
             catapults_enabled,
+            bucket_capacity,
+            num_hashes,
             elapsed_secs: elapsed.as_secs_f64(),
             qps: total_qps,
             checksum,
@@ -191,6 +239,7 @@ fn run_search_job(
             searches_with_catapults: Some(combined_stats.get_searches_with_catapults()),
             catapult_usage_pct: Some(catapult_usage_pct),
             avg_catapults_added: Some(avg_catapults_added),
+            neighbors,
         }
     } else {
         eprintln!(
@@ -204,6 +253,8 @@ fn run_search_job(
             beam_width,
             num_queries,
             catapults_enabled,
+            bucket_capacity,
+            num_hashes,
             elapsed_secs: elapsed.as_secs_f64(),
             qps: total_qps,
             checksum,
@@ -212,6 +263,7 @@ fn run_search_job(
             searches_with_catapults: None,
             catapult_usage_pct: None,
             avg_catapults_added: None,
+            neighbors,
         }
     };
 
@@ -236,10 +288,9 @@ fn main() {
 
     // Load the queries
     eprintln!("Loading queries...");
-    let queries: Vec<Vec<AlignedBlock>> = Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries);
-    // .into_iter()
-    // .take(150_000)
-    // .collect();
+    let queries: Vec<Vec<AlignedBlock>> =
+        Vec::<Vec<AlignedBlock>>::load_from_npy(&args.queries, None);
+
     let queries = Arc::new(queries);
 
     eprintln!("\nStarting cartesian product sweep:");
@@ -255,34 +306,44 @@ fn main() {
 
     // Run cartesian product of seeds, threads, and beam_width
     for &seed in &args.seeds {
-        eprintln!("\n--- Loading adjacency graph with seed={} ---", seed);
-        let full_graph = Arc::new(
-            AdjacencyGraph::<FifoSet<30>, FlatSearch>::load_flat_from_path(
-                PathBuf::from_str(&args.graph).unwrap(),
-                PathBuf::from_str(&args.payload).unwrap(),
-                16, // num_hash
-                seed,
-                RunningMode::from_string(&args.mode),
-            ),
-        );
-        let graph_size = full_graph.len();
-        eprintln!("Adjacency graph loaded with {graph_size} nodes");
-
-        for &num_threads in &args.threads {
-            for &beam_width in &args.beam_width {
-                // Clear all catapults before each job to ensure a clean slate
-                full_graph.clear_all_catapults();
-
-                let result = run_search_job(
-                    Arc::clone(&full_graph),
-                    Arc::clone(&queries),
-                    num_threads,
-                    beam_width,
-                    args.num_neighbors,
-                    RunningMode::from_string(&args.mode) == RunningMode::Catapult,
-                    seed,
+        for num_hash in NUM_HASH {
+            for bucket_cap in BUCKET_SIZE {
+                eprintln!(
+                    "\n--- Loading adjacency graph with seed={}, num_hash={}, bucket_cap={} ---",
+                    seed, num_hash, bucket_cap
                 );
-                all_results.push(result);
+                let full_graph =
+                    Arc::new(AdjacencyGraph::<FifoSet, FlatSearch>::load_flat_from_path(
+                        PathBuf::from_str(&args.graph).unwrap(),
+                        PathBuf::from_str(&args.payload).unwrap(),
+                        num_hash, // num_hash
+                        bucket_cap,
+                        seed,
+                        RunningMode::from_string(&args.mode),
+                    ));
+                let graph_size = full_graph.len();
+                eprintln!("Adjacency graph loaded with {graph_size} nodes");
+
+                for &num_threads in &args.threads {
+                    for &beam_width in &args.beam_width {
+                        // Clear all catapults before each job to ensure a clean slate
+                        full_graph.clear_all_catapults();
+
+                        let result = run_search_job(
+                            Arc::clone(&full_graph),
+                            Arc::clone(&queries),
+                            num_threads,
+                            beam_width,
+                            args.num_neighbors,
+                            RunningMode::from_string(&args.mode) == RunningMode::Catapult,
+                            seed,
+                            bucket_cap,
+                            num_hash,
+                            args.output_neighbors,
+                        );
+                        all_results.push(result);
+                    }
+                }
             }
         }
     }

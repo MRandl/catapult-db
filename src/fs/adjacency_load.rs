@@ -155,6 +155,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         graph_path: PathBuf,
         payload_path: PathBuf,
         num_hash: usize,
+        bucket_cap: usize,
         seed: u64,
         running_mode: RunningMode,
     ) -> Self {
@@ -208,6 +209,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 
         let engine_params = EngineStarterParams::new(
             num_hash,
+            bucket_cap,
             plane_dim,
             entry_point_id,
             seed,
@@ -215,9 +217,18 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         );
 
         let lshapg = if running_mode == RunningMode::LshApg {
-            let mut index = ZOrderIndex::new(num_hash, plane_dim, seed, 0.3);
+            let w = 2.0;
+            let mut index = [
+                ZOrderIndex::new(num_hash, plane_dim, seed, w),
+                ZOrderIndex::new(num_hash, plane_dim, seed + 1, w),
+                ZOrderIndex::new(num_hash, plane_dim, seed + 2, w),
+                ZOrderIndex::new(num_hash, plane_dim, seed + 3, w),
+            ];
             for (i, vector) in adjacency.iter().enumerate() {
-                index.insert(&vector.payload, NodeId { internal: i });
+                index[0].insert(&vector.payload, NodeId { internal: i });
+                index[1].insert(&vector.payload, NodeId { internal: i });
+                index[2].insert(&vector.payload, NodeId { internal: i });
+                index[3].insert(&vector.payload, NodeId { internal: i });
             }
             Some(index)
         } else {
@@ -245,18 +256,20 @@ mod tests {
         let graph_path = "test_index/ann";
         let payload_path = "test_index/ann_vectors.bin";
 
-        let graphed1 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
+        let graphed1 = AdjacencyGraph::<FifoSet, FlatSearch>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
-            4,        // num_hash
+            4, // num_hash
+            40,
             42,       // seed
             Catapult, // enabled_catapults
         );
 
-        let graphed2 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
+        let graphed2 = AdjacencyGraph::<FifoSet, FlatSearch>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
-            4,        // num_hash
+            4, // num_hash
+            40,
             42,       // seed
             Catapult, // enabled_catapults
         );

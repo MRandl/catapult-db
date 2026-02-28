@@ -20,7 +20,7 @@ pub trait CatapultEvictingStructure {
     ///
     /// # Returns
     /// A new empty instance of the implementing type
-    fn new() -> Self;
+    fn new(max_cap: usize) -> Self;
 
     /// Returns all currently stored catapult node indices as a vector.
     ///

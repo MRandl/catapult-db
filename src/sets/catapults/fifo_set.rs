@@ -13,11 +13,12 @@ use crate::{search::NodeId, sets::catapults::CatapultEvictingStructure};
 ///
 /// # Panics
 /// Creating a `FifoSet` with `CAPACITY == 0` will panic
-pub struct FifoSet<const CAPACITY: usize> {
+pub struct FifoSet {
+    capacity: usize,
     queue: VecDeque<NodeId>,
 }
 
-impl<const CAPACITY: usize> FifoSet<CAPACITY> {
+impl FifoSet {
     /// Creates a new empty FIFO set with the specified capacity.
     ///
     /// # Returns
@@ -25,21 +26,16 @@ impl<const CAPACITY: usize> FifoSet<CAPACITY> {
     ///
     /// # Panics
     /// Panics if `CAPACITY == 0`
-    pub fn new() -> Self {
-        assert!(CAPACITY > 0);
+    pub fn new(capacity: usize) -> Self {
+        assert!(capacity > 0);
         FifoSet {
-            queue: VecDeque::with_capacity(CAPACITY),
+            capacity,
+            queue: VecDeque::with_capacity(capacity),
         }
     }
 }
 
-impl<const CAPACITY: usize> Default for FifoSet<CAPACITY> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<const CAPACITY: usize> CatapultEvictingStructure for FifoSet<CAPACITY> {
+impl CatapultEvictingStructure for FifoSet {
     fn to_vec(&self) -> Vec<NodeId> {
         self.queue.iter().copied().collect()
     }
@@ -51,7 +47,7 @@ impl<const CAPACITY: usize> CatapultEvictingStructure for FifoSet<CAPACITY> {
         }
 
         // If at capacity, evict the oldest element
-        if self.queue.len() == CAPACITY {
+        if self.queue.len() == self.capacity {
             self.queue.pop_front();
         }
 
@@ -59,8 +55,9 @@ impl<const CAPACITY: usize> CatapultEvictingStructure for FifoSet<CAPACITY> {
         self.queue.push_back(key);
     }
 
-    fn new() -> Self {
+    fn new(capacity: usize) -> Self {
         FifoSet {
+            capacity,
             queue: VecDeque::new(),
         }
     }
@@ -70,10 +67,10 @@ impl<const CAPACITY: usize> CatapultEvictingStructure for FifoSet<CAPACITY> {
     }
 }
 
-impl<const CAPACITY: usize> std::fmt::Debug for FifoSet<CAPACITY> {
+impl std::fmt::Debug for FifoSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FifoSet")
-            .field("capacity", &CAPACITY)
+            .field("capacity", &self.capacity)
             .field("queue", &self.queue)
             .finish()
     }
@@ -85,13 +82,13 @@ mod tests {
 
     #[test]
     fn new_creates_empty_fifo_set() {
-        let fifo = FifoSet::<5>::new();
+        let fifo = FifoSet::new(5);
         assert_eq!(fifo.queue.len(), 0);
     }
 
     #[test]
     fn insert_single_element() {
-        let mut fifo = FifoSet::<3>::new();
+        let mut fifo = FifoSet::new(3);
         fifo.insert(NodeId { internal: 10 });
         assert_eq!(fifo.queue.len(), 1);
         assert_eq!(fifo.queue[0].internal, 10);
@@ -99,7 +96,7 @@ mod tests {
 
     #[test]
     fn insert_up_to_capacity() {
-        let mut fifo = FifoSet::<3>::new();
+        let mut fifo = FifoSet::new(3);
         fifo.insert(NodeId { internal: 1 });
         fifo.insert(NodeId { internal: 2 });
         fifo.insert(NodeId { internal: 3 });
@@ -112,7 +109,7 @@ mod tests {
 
     #[test]
     fn insert_beyond_capacity_evicts_oldest() {
-        let mut fifo = FifoSet::<3>::new();
+        let mut fifo = FifoSet::new(3);
         fifo.insert(NodeId { internal: 1 });
         fifo.insert(NodeId { internal: 2 });
         fifo.insert(NodeId { internal: 3 });
@@ -126,7 +123,7 @@ mod tests {
 
     #[test]
     fn fifo_order_maintained_over_multiple_evictions() {
-        let mut fifo = FifoSet::<3>::new();
+        let mut fifo = FifoSet::new(3);
 
         // Fill to capacity
         fifo.insert(NodeId { internal: 1 });
@@ -146,7 +143,7 @@ mod tests {
 
     #[test]
     fn capacity_one_always_contains_last_inserted() {
-        let mut fifo = FifoSet::<1>::new();
+        let mut fifo = FifoSet::new(1);
 
         fifo.insert(NodeId { internal: 10 });
         assert_eq!(fifo.queue[0].internal, 10);
@@ -163,12 +160,12 @@ mod tests {
     #[test]
     #[should_panic]
     fn zero_capacity_panics() {
-        let _fifo = FifoSet::<0>::new();
+        let _fifo = FifoSet::new(0);
     }
 
     #[test]
     fn large_capacity_behaves_correctly() {
-        let mut fifo = FifoSet::<1000>::new();
+        let mut fifo = FifoSet::new(1000);
 
         // Insert 500 elements
         for i in 0..500 {
@@ -182,7 +179,7 @@ mod tests {
 
     #[test]
     fn stress_test_many_insertions() {
-        let mut fifo = FifoSet::<100>::new();
+        let mut fifo = FifoSet::new(100);
 
         // Insert 10,000 elements
         for i in 0..10_000 {
@@ -197,7 +194,7 @@ mod tests {
 
     #[test]
     fn test_debug() {
-        let mut fifo = FifoSet::<3>::new();
+        let mut fifo = FifoSet::new(3);
         fifo.insert(NodeId { internal: 1 });
         fifo.insert(NodeId { internal: 2 });
 
@@ -206,15 +203,8 @@ mod tests {
     }
 
     #[test]
-    fn test_default() {
-        let fifo: FifoSet<5> = FifoSet::default();
-        assert_eq!(fifo.queue.len(), 0);
-        assert_eq!(fifo.queue.capacity(), 5);
-    }
-
-    #[test]
     fn duplicate_insertion_maintains_set_property() {
-        let mut fifo = FifoSet::<3>::new();
+        let mut fifo = FifoSet::new(3);
 
         fifo.insert(NodeId { internal: 1 });
         fifo.insert(NodeId { internal: 1 });
@@ -226,7 +216,7 @@ mod tests {
 
     #[test]
     fn duplicate_with_full_capacity_maintains_set_behavior() {
-        let mut fifo = FifoSet::<3>::new();
+        let mut fifo = FifoSet::new(3);
 
         fifo.insert(NodeId { internal: 1 });
         fifo.insert(NodeId { internal: 2 });
@@ -244,7 +234,7 @@ mod tests {
 
     #[test]
     fn repeated_duplicates_maintain_fifo_order() {
-        let mut fifo = FifoSet::<4>::new();
+        let mut fifo = FifoSet::new(4);
 
         fifo.insert(NodeId { internal: 1 });
         fifo.insert(NodeId { internal: 2 });
@@ -282,7 +272,7 @@ mod tests {
 
     #[test]
     fn set_behavior_no_duplicates_in_final_state() {
-        let mut fifo = FifoSet::<5>::new();
+        let mut fifo = FifoSet::new(5);
 
         fifo.insert(NodeId { internal: 10 });
         fifo.insert(NodeId { internal: 20 });

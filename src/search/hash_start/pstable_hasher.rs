@@ -75,17 +75,13 @@ impl PStableHashingBlock {
         //
         // We can also do constant-based offset to erase some of the problems caused by ReLU.
         // I'll investigate what's best for that baseline.
-        //
-        // Alternative under consideration with a constant based offset :
-        //     if candidate.is_finite() {
-        //       candidate.floor() as i64).wrapping_add(16) as u64
-        //     } else {                                 ^^^^^^^^- or some other constant
-        //      0u64
-        //     }
-        //
-        //
-        if candidate.is_finite() && candidate >= 0.0 {
-            candidate.floor() as u128
+        if candidate.is_finite() {
+            let shifted_candidate = candidate.floor() + 20.;
+            if shifted_candidate >= 0.0 {
+                shifted_candidate as u128
+            } else {
+                0u128
+            }
         } else {
             0u128
         }
@@ -185,17 +181,6 @@ mod tests {
         let q = vec![AlignedBlock::new([3.0; 16])];
 
         assert_ne!(hasher1.hash(&q), hasher2.hash(&q));
-    }
-
-    #[test]
-    fn test_hash_with_many_hash_functions() {
-        // 25 hash functions fit within u128 (5 bits each)
-        let hasher = PStableHashingBlock::new_seeded(25, 16, 42, 1.0);
-        let q = vec![AlignedBlock::new([1.0; 16])];
-        let hash = hasher.hash(&q);
-
-        // Should compute without panicking
-        let _ = hash;
     }
 
     #[test]

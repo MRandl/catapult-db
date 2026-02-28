@@ -34,6 +34,9 @@ pub struct EngineStarterParams {
     /// Number of LSH hash bits (determines 2^num_hash buckets)
     pub num_hash: usize,
 
+    /// Capacity of each bucket in the LSH table
+    pub bucket_capacity: usize,
+
     /// Dimension of input vectors in f32 elements
     pub plane_dim: usize,
 
@@ -61,6 +64,7 @@ impl EngineStarterParams {
     /// A new `EngineStarterParams` instance
     pub fn new(
         num_hash: usize,
+        bucket_capacity: usize,
         plane_dim: usize,
         starting_node: NodeId,
         seed: u64,
@@ -68,6 +72,7 @@ impl EngineStarterParams {
     ) -> Self {
         Self {
             num_hash,
+            bucket_capacity,
             plane_dim,
             starting_node,
             seed,
@@ -102,7 +107,7 @@ where
         let amount_of_catapult_sets = 1 << num_hash;
         let mut catapult_vecs = Vec::with_capacity(amount_of_catapult_sets);
         for _ in 0..amount_of_catapult_sets {
-            catapult_vecs.push(RwLock::new(T::new()));
+            catapult_vecs.push(RwLock::new(T::new(params.bucket_capacity)));
         }
 
         Self {
@@ -170,9 +175,10 @@ mod tests {
     use super::*;
     use crate::{numerics::SIMD_LANECOUNT, sets::catapults::FifoSet};
 
-    type TestEngineStarter = EngineStarter<FifoSet<30>>;
+    type TestEngineStarter = EngineStarter<FifoSet>;
 
     const DEFAULT_NUM_HASH: usize = 8;
+    const DEFAULT_BUCKET_CAP: usize = 40;
     const DEFAULT_STARTING_NODE: usize = 1000;
     const DEFAULT_SEED: u64 = 42;
 
@@ -180,6 +186,7 @@ mod tests {
     fn default_params() -> EngineStarterParams {
         EngineStarterParams::new(
             DEFAULT_NUM_HASH,
+            DEFAULT_BUCKET_CAP,
             SIMD_LANECOUNT,
             NodeId {
                 internal: DEFAULT_STARTING_NODE,
@@ -193,6 +200,7 @@ mod tests {
     fn params_with_seed(seed: u64) -> EngineStarterParams {
         EngineStarterParams::new(
             DEFAULT_NUM_HASH,
+            DEFAULT_BUCKET_CAP,
             SIMD_LANECOUNT,
             NodeId {
                 internal: DEFAULT_STARTING_NODE,
@@ -206,6 +214,7 @@ mod tests {
     fn params_with_dims(plane_dim: usize) -> EngineStarterParams {
         EngineStarterParams::new(
             DEFAULT_NUM_HASH,
+            DEFAULT_BUCKET_CAP,
             plane_dim,
             NodeId {
                 internal: DEFAULT_STARTING_NODE,
@@ -467,6 +476,7 @@ mod tests {
         let custom_starting = 999;
         let params = EngineStarterParams::new(
             DEFAULT_NUM_HASH,
+            DEFAULT_BUCKET_CAP,
             SIMD_LANECOUNT,
             NodeId {
                 internal: custom_starting,
