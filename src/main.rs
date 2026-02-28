@@ -18,8 +18,8 @@ use std::{
     thread,
 };
 
-const NUM_HASH: [usize; 1] = [8];
-const BUCKET_SIZE: [usize; 1] = [40];
+const NUM_HASH: usize = 8;
+const BUCKET_SIZE: usize = 40;
 
 /// JSON output structures
 #[derive(Serialize, Deserialize, Debug)]
@@ -146,8 +146,7 @@ fn run_search_job(
                     let batch_end = std::cmp::min(batch_start + batch_size, num_queries);
 
                     // Process this batch
-                    for (offset, query) in
-                        queries_clone[batch_start..batch_end].iter().enumerate()
+                    for (offset, query) in queries_clone[batch_start..batch_end].iter().enumerate()
                     {
                         let result = black_box(graph.beam_search(
                             query,
@@ -306,44 +305,39 @@ fn main() {
 
     // Run cartesian product of seeds, threads, and beam_width
     for &seed in &args.seeds {
-        for num_hash in NUM_HASH {
-            for bucket_cap in BUCKET_SIZE {
-                eprintln!(
-                    "\n--- Loading adjacency graph with seed={}, num_hash={}, bucket_cap={} ---",
-                    seed, num_hash, bucket_cap
+        eprintln!(
+            "\n--- Loading adjacency graph with seed={}, num_hash={}, bucket_cap={} ---",
+            seed, NUM_HASH, BUCKET_SIZE
+        );
+        let full_graph = Arc::new(AdjacencyGraph::<FifoSet, FlatSearch>::load_flat_from_path(
+            PathBuf::from_str(&args.graph).unwrap(),
+            PathBuf::from_str(&args.payload).unwrap(),
+            NUM_HASH, // num_hash
+            BUCKET_SIZE,
+            seed,
+            RunningMode::from_string(&args.mode),
+        ));
+        let graph_size = full_graph.len();
+        eprintln!("Adjacency graph loaded with {graph_size} nodes");
+
+        for &num_threads in &args.threads {
+            for &beam_width in &args.beam_width {
+                // Clear all catapults before each job to ensure a clean slate
+                full_graph.clear_all_catapults();
+
+                let result = run_search_job(
+                    Arc::clone(&full_graph),
+                    Arc::clone(&queries),
+                    num_threads,
+                    beam_width,
+                    args.num_neighbors,
+                    RunningMode::from_string(&args.mode) == RunningMode::Catapult,
+                    seed,
+                    BUCKET_SIZE,
+                    NUM_HASH,
+                    args.output_neighbors,
                 );
-                let full_graph =
-                    Arc::new(AdjacencyGraph::<FifoSet, FlatSearch>::load_flat_from_path(
-                        PathBuf::from_str(&args.graph).unwrap(),
-                        PathBuf::from_str(&args.payload).unwrap(),
-                        num_hash, // num_hash
-                        bucket_cap,
-                        seed,
-                        RunningMode::from_string(&args.mode),
-                    ));
-                let graph_size = full_graph.len();
-                eprintln!("Adjacency graph loaded with {graph_size} nodes");
-
-                for &num_threads in &args.threads {
-                    for &beam_width in &args.beam_width {
-                        // Clear all catapults before each job to ensure a clean slate
-                        full_graph.clear_all_catapults();
-
-                        let result = run_search_job(
-                            Arc::clone(&full_graph),
-                            Arc::clone(&queries),
-                            num_threads,
-                            beam_width,
-                            args.num_neighbors,
-                            RunningMode::from_string(&args.mode) == RunningMode::Catapult,
-                            seed,
-                            bucket_cap,
-                            num_hash,
-                            args.output_neighbors,
-                        );
-                        all_results.push(result);
-                    }
-                }
+                all_results.push(result);
             }
         }
     }
