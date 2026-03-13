@@ -4,3 +4,7 @@ bindings/target
 perf.data
 perf.data.old
 flamegraph.svg
+scripts/*.csv
+scripts/*.json
+*.json
+*.folded
