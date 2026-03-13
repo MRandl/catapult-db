@@ -188,6 +188,14 @@ where
             // worst ones (and the duplicates).
             let neighbors = best_candidate_neighs.to_slice();
 
+            // Record each (src → dst) edge as considered before computing distances.
+            if stats.has_adv_tracking() {
+                let src = best_candidate_node.index.internal;
+                for &dst in neighbors.iter() {
+                    stats.record_considered_edge(src, dst.internal);
+                }
+            }
+
             let neighbor_distances = self.distances_from_indices(
                 &neighbors,
                 query,
@@ -195,7 +203,17 @@ where
                 stats,
             );
 
-            candidates.insert_batch(&neighbor_distances);
+            if stats.has_adv_tracking() {
+                let src = best_candidate_node.index.internal;
+                let inserted = candidates.insert_batch_tracked(&neighbor_distances);
+                for (is_inserted, candidate) in inserted.iter().zip(neighbor_distances.iter()) {
+                    if *is_inserted {
+                        stats.record_used_edge(src, candidate.index.internal);
+                    }
+                }
+            } else {
+                candidates.insert_batch(&neighbor_distances);
+            }
 
             // mark our current node as visited (not to be expanded again)
             visited.insert(best_candidate_node.index);
@@ -308,6 +326,11 @@ where
     #[allow(clippy::len_without_is_empty)] // checking the size of the graph is fine, but it is never ever empty
     pub fn len(&self) -> usize {
         self.adjacency.len()
+    }
+
+    /// Returns the total number of directed edges in the graph (sum of all neighbor list lengths).
+    pub fn total_edge_count(&self) -> usize {
+        self.adjacency.iter().map(|n| n.neighbors.to_slice().len()).sum()
     }
 }
 

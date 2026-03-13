@@ -94,6 +94,45 @@ impl SmallestKCandidates {
         added_count
     }
 
+    /// Like `insert_batch` but also returns a parallel `Vec<bool>` indicating which items
+    /// were actually inserted (vs. rejected as duplicates or out-of-beam).
+    ///
+    /// Only intended for the adversarial-edge analysis path; prefer `insert_batch` in
+    /// normal search to avoid the allocation.
+    pub fn insert_batch_tracked(&mut self, items: &[CandidateEntry]) -> Vec<bool> {
+        let mut inserted = vec![false; items.len()];
+
+        for (i, item) in items.iter().enumerate() {
+            let idx = self.sorted_members.partition_point(|m| m < item);
+
+            let mut is_duplicate = false;
+            let mut check_idx = idx;
+            while check_idx < self.sorted_members.len()
+                && self.sorted_members[check_idx].distance == item.distance
+            {
+                if self.sorted_members[check_idx].index == item.index {
+                    is_duplicate = true;
+                    break;
+                }
+                check_idx += 1;
+            }
+            if is_duplicate {
+                continue;
+            }
+
+            if self.sorted_members.len() < self.capacity {
+                self.sorted_members.insert(idx, *item);
+                inserted[i] = true;
+            } else if idx < self.capacity {
+                self.sorted_members.pop();
+                self.sorted_members.insert(idx, *item);
+                inserted[i] = true;
+            }
+        }
+
+        inserted
+    }
+
     /// Returns an iterator over the candidate entries in sorted order (smallest to largest).
     ///
     /// # Returns

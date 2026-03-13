@@ -1,8 +1,33 @@
+use hashbrown::{HashMap, HashSet};
+
+/// Per-(src, dst) edge tracking data collected during beam search.
+///
+/// Enabled only when adversarial edge analysis is requested; not tracked in normal runs.
+/// **Not merged** by `Stats::merge` — use single-threaded search when this is active.
+pub struct AdvEdgeTracking {
+    /// How many times each directed graph edge (src, dst) had its distance computed.
+    pub edge_consider_counts: HashMap<(usize, usize), u32>,
+    /// Set of directed edges (src, dst) that were actually inserted into a candidate set
+    /// at least once across all queries.
+    pub used_edges: HashSet<(usize, usize)>,
+}
+
+impl AdvEdgeTracking {
+    fn new() -> Self {
+        Self {
+            edge_consider_counts: HashMap::new(),
+            used_edges: HashSet::new(),
+        }
+    }
+}
+
 /// Performance statistics for tracking beam search operations.
 ///
 /// Collects metrics about search efficiency including the number of searches performed,
 /// nodes explored, distances computed, and how often catapults provided acceleration.
 /// Statistics can be merged across threads for parallel workloads.
+///
+/// Adversarial edge tracking (`adv_tracking`) is opt-in and **not** preserved by `merge`.
 pub struct Stats {
     /// Total number of beam search calls performed
     beam_calls: usize,
@@ -15,6 +40,9 @@ pub struct Stats {
 
     /// Number of searches that benefited from at least one catapult starting point
     searches_with_catapults: usize,
+
+    /// Optional adversarial edge tracking data. None in normal runs.
+    adv_tracking: Option<Box<AdvEdgeTracking>>,
 }
 
 impl Stats {
@@ -28,7 +56,40 @@ impl Stats {
             nodes_visited: 0,
             dists_computed: 0,
             searches_with_catapults: 0,
+            adv_tracking: None,
         }
+    }
+
+    /// Enables adversarial edge tracking. Must be called before any searches.
+    /// Incompatible with multi-threaded use via `merge`.
+    pub fn enable_adv_tracking(&mut self) {
+        self.adv_tracking = Some(Box::new(AdvEdgeTracking::new()));
+    }
+
+    /// Returns true if adversarial edge tracking is active.
+    pub fn has_adv_tracking(&self) -> bool {
+        self.adv_tracking.is_some()
+    }
+
+    /// Records that the directed graph edge (src→dst) had its distance computed.
+    /// No-op if tracking is not enabled.
+    pub fn record_considered_edge(&mut self, src: usize, dst: usize) {
+        if let Some(t) = self.adv_tracking.as_mut() {
+            *t.edge_consider_counts.entry((src, dst)).or_insert(0) += 1;
+        }
+    }
+
+    /// Records that the directed graph edge (src→dst) was inserted into a candidate set.
+    /// No-op if tracking is not enabled.
+    pub fn record_used_edge(&mut self, src: usize, dst: usize) {
+        if let Some(t) = self.adv_tracking.as_mut() {
+            t.used_edges.insert((src, dst));
+        }
+    }
+
+    /// Returns a reference to the adversarial edge tracking data, if enabled.
+    pub fn adv_tracking(&self) -> Option<&AdvEdgeTracking> {
+        self.adv_tracking.as_deref()
     }
 
     /// Increments the beam search call counter by one.
@@ -96,6 +157,7 @@ impl Stats {
     /// Merges two statistics objects by summing their counters.
     ///
     /// This is useful for aggregating statistics from multiple threads or batches.
+    /// **Note:** `adv_tracking` data is not merged and will be `None` in the result.
     ///
     /// # Arguments
     /// * `othr` - The other statistics object to merge with
@@ -108,6 +170,7 @@ impl Stats {
             nodes_visited: self.nodes_visited + othr.nodes_visited,
             dists_computed: self.dists_computed + othr.dists_computed,
             searches_with_catapults: self.searches_with_catapults + othr.searches_with_catapults,
+            adv_tracking: None,
         }
     }
 }
