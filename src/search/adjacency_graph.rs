@@ -153,6 +153,7 @@ where
     /// * Panics if `beam_width < k`
     /// * Panics if starting_candidates is empty
     /// * Panics if neighbor indices are out of bounds (graph invariant violation)
+    #[tracing::instrument(level = "trace", skip_all, fields(k, beam_width))]
     fn beam_search_raw(
         &self,
         query: &[AlignedBlock],
@@ -242,6 +243,7 @@ where
     /// 3. Runs beam search from these starting points
     /// 4. Caches the best result as a catapult (if catapults enabled)
     /// 5. Updates statistics with catapult usage
+    #[tracing::instrument(level = "trace", skip_all, fields(k, beam_width))]
     pub fn beam_search(
         &self,
         query: &[AlignedBlock],
@@ -317,10 +319,10 @@ mod tests {
             graph_algo::{FlatCatapultChoice, FlatSearch},
             hash_start::{EngineStarter, EngineStarterParams},
         },
-        sets::{catapults::FifoSet, fixed::FlatFixedSet},
+        sets::{catapults::LruSet, fixed::FlatFixedSet},
     };
 
-    pub type TestEngineStarter = EngineStarter<FifoSet>;
+    pub type TestEngineStarter = EngineStarter<LruSet>;
 
     use super::*;
 
@@ -328,7 +330,7 @@ mod tests {
     // Nodes: 0 (pos 0), 1 (pos 10), 2 (pos 20), 3 (pos 30), 4 (pos 40)
     // Edges: 0 -> 1 -> 2 -> 3 -> 4
     // Query: 11.0
-    fn setup_simple_graph(catapults_enabled: bool) -> AdjacencyGraph<FifoSet, FlatSearch> {
+    fn setup_simple_graph(catapults_enabled: bool) -> AdjacencyGraph<LruSet, FlatSearch> {
         let nodes = vec![
             // 0: Pos 0.0, Neighbors: [1]
             Node {

@@ -17,6 +17,7 @@ use std::{
     path::PathBuf,
     vec,
 };
+use tracing::info_span;
 
 impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
     /// Reads the next N bytes from a byte iterator.
@@ -179,24 +180,27 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 
         let mut adjacency = Vec::new();
 
-        while let Some(pointsize) = Self::next_u32(&mut graph_file) {
-            let mut neighs = vec![];
+        {
+            let _span = info_span!("parse_nodes", full_size).entered();
+            while let Some(pointsize) = Self::next_u32(&mut graph_file) {
+                let mut neighs = vec![];
 
-            for _ in 0..pointsize {
-                neighs.push(
-                    Self::next_u32(&mut graph_file)
-                        .expect("Graph file declared more nodes than actually found")
-                        as usize,
-                );
+                for _ in 0..pointsize {
+                    neighs.push(
+                        Self::next_u32(&mut graph_file)
+                            .expect("Graph file declared more nodes than actually found")
+                            as usize,
+                    );
+                }
+
+                let associated_payload = Self::next_payload(&mut payload_file, payload_dim)
+                    .expect("Error while parsing payloads");
+
+                adjacency.push(Node {
+                    neighbors: FlatFixedSet::new(neighs),
+                    payload: associated_payload.into_boxed_slice(),
+                });
             }
-
-            let associated_payload = Self::next_payload(&mut payload_file, payload_dim)
-                .expect("Error while parsing payloads");
-
-            adjacency.push(Node {
-                neighbors: FlatFixedSet::new(neighs),
-                payload: associated_payload.into_boxed_slice(),
-            });
         }
 
         // we should have read all of the file contents by now.
@@ -220,6 +224,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         );
 
         let lshapg = if running_mode == RunningMode::LshApg {
+            let _span = info_span!("build_lshapg_index", num_nodes = adjacency.len()).entered();
             let w = 1.0;
             let mut index: [ZOrderIndex; LSH_APG_REDUNDANCY] =
                 [ZOrderIndex::new(num_hash, plane_dim, seed, w)];
@@ -244,7 +249,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 mod tests {
     use crate::{
         search::{AdjacencyGraph, RunningMode::Catapult, graph_algo::FlatSearch},
-        sets::catapults::FifoSet,
+        sets::catapults::LruSet,
     };
 
     #[test]
@@ -252,7 +257,7 @@ mod tests {
         let graph_path = "test_index/ann";
         let payload_path = "test_index/ann_vectors.bin";
 
-        let graphed1 = AdjacencyGraph::<FifoSet, FlatSearch>::load_flat_from_path(
+        let graphed1 = AdjacencyGraph::<LruSet, FlatSearch>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
             4, // num_hash
@@ -261,7 +266,7 @@ mod tests {
             Catapult, // enabled_catapults
         );
 
-        let graphed2 = AdjacencyGraph::<FifoSet, FlatSearch>::load_flat_from_path(
+        let graphed2 = AdjacencyGraph::<LruSet, FlatSearch>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
             4, // num_hash

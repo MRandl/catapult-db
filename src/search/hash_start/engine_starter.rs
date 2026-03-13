@@ -173,9 +173,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{numerics::SIMD_LANECOUNT, sets::catapults::FifoSet};
+    use crate::{numerics::SIMD_LANECOUNT, sets::catapults::LruSet};
 
-    type TestEngineStarter = EngineStarter<FifoSet>;
+    type TestEngineStarter = EngineStarter<LruSet>;
 
     const DEFAULT_NUM_HASH: usize = 8;
     const DEFAULT_BUCKET_CAP: usize = 40;

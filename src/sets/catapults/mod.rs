@@ -5,7 +5,7 @@
 //! eviction-based data structures to store and manage these catapults efficiently.
 
 mod catapult_neighbor_set;
-mod fifo_set;
+mod lru_set;
 
 pub use catapult_neighbor_set::*;
-pub use fifo_set::*;
+pub use lru_set::*;
