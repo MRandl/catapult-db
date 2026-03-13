@@ -65,6 +65,13 @@ struct Args {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+struct AdversarialEdge {
+    src: usize,
+    dst: usize,
+    times_considered: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct RunResult {
     mode: String,
     seed: u64,
@@ -75,6 +82,7 @@ struct RunResult {
     adversarial_edges: usize,
     adversarial_fraction: f64,
     consideration_counts: ConsiderationCountStats,
+    top_adversarial_edges: Vec<AdversarialEdge>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -161,14 +169,28 @@ fn run_analysis(
     let tracking = merge_tracking(per_thread_tracking);
     let used_edge_count = tracking.used_edges.len();
 
-    let mut adversarial_counts: Vec<u32> = tracking
+    let mut adversarial_edges_raw: Vec<(usize, usize, u32)> = tracking
         .edge_consider_counts
         .iter()
         .filter(|((src, dst), _)| !tracking.used_edges.contains(&(*src, *dst)))
-        .map(|(_, &count)| count)
+        .map(|(&(src, dst), &count)| (src, dst, count))
         .collect();
 
-    let adversarial_edge_count = adversarial_counts.len();
+    let adversarial_edge_count = adversarial_edges_raw.len();
+
+    // Sort descending by count for the top-1000 list, then ascending for percentiles.
+    adversarial_edges_raw.sort_unstable_by(|a, b| b.2.cmp(&a.2));
+
+    let top_adversarial_edges: Vec<AdversarialEdge> = adversarial_edges_raw
+        .iter()
+        .take(1000)
+        .map(|&(src, dst, times_considered)| AdversarialEdge { src, dst, times_considered })
+        .collect();
+
+    let mut adversarial_counts: Vec<u32> = adversarial_edges_raw
+        .iter()
+        .map(|&(_, _, count)| count)
+        .collect();
     adversarial_counts.sort_unstable();
 
     let consideration_counts = if adversarial_counts.is_empty() {
@@ -222,6 +244,7 @@ fn run_analysis(
         adversarial_edges: adversarial_edge_count,
         adversarial_fraction,
         consideration_counts,
+        top_adversarial_edges,
     }
 }
 
