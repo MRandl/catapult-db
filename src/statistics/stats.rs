@@ -13,7 +13,7 @@ pub struct AdvEdgeTracking {
 }
 
 impl AdvEdgeTracking {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             edge_consider_counts: HashMap::new(),
             used_edges: HashSet::new(),
@@ -90,6 +90,11 @@ impl Stats {
     /// Returns a reference to the adversarial edge tracking data, if enabled.
     pub fn adv_tracking(&self) -> Option<&AdvEdgeTracking> {
         self.adv_tracking.as_deref()
+    }
+
+    /// Consumes and returns the adversarial edge tracking data, if enabled.
+    pub fn take_adv_tracking(&mut self) -> Option<AdvEdgeTracking> {
+        self.adv_tracking.take().map(|b| *b)
     }
 
     /// Increments the beam search call counter by one.
