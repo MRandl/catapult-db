@@ -81,8 +81,12 @@ struct RunResult {
     used_edges: usize,
     adversarial_edges: usize,
     adversarial_fraction: f64,
-    consideration_counts: ConsiderationCountStats,
+    /// Distribution of consideration counts for adversarial (never-inserted) edges
+    adversarial_consideration_counts: ConsiderationCountStats,
+    /// Distribution of consideration counts for used (at least once inserted) edges
+    used_consideration_counts: ConsiderationCountStats,
     top_adversarial_edges: Vec<AdversarialEdge>,
+    top_used_edges: Vec<AdversarialEdge>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -104,6 +108,46 @@ fn percentile(sorted: &[u32], p: f64) -> u32 {
     }
     let idx = ((p / 100.0) * (sorted.len() - 1) as f64).round() as usize;
     sorted[idx.min(sorted.len() - 1)]
+}
+
+/// Builds the top-1000 edge list and consideration count stats from a raw (src, dst, count) set.
+/// `edges` need not be pre-sorted; this function sorts them internally.
+fn edge_report(mut edges: Vec<(usize, usize, u32)>) -> (Vec<AdversarialEdge>, ConsiderationCountStats) {
+    edges.sort_unstable_by(|a, b| b.2.cmp(&a.2));
+
+    let top: Vec<AdversarialEdge> = edges
+        .iter()
+        .take(1000)
+        .map(|&(src, dst, times_considered)| AdversarialEdge { src, dst, times_considered })
+        .collect();
+
+    let mut counts: Vec<u32> = edges.iter().map(|&(_, _, c)| c).collect();
+    counts.sort_unstable();
+    let stats = counts_stats(&counts);
+
+    (top, stats)
+}
+
+fn counts_stats(sorted: &[u32]) -> ConsiderationCountStats {
+    if sorted.is_empty() {
+        return ConsiderationCountStats {
+            min: 0, p25: 0, median: 0, p75: 0, p90: 0, p99: 0, max: 0, mean: 0.0,
+            considered_once: 0,
+        };
+    }
+    let sum: u64 = sorted.iter().map(|&c| c as u64).sum();
+    let considered_once = sorted.iter().filter(|&&c| c == 1).count();
+    ConsiderationCountStats {
+        min: sorted[0],
+        p25: percentile(sorted, 25.0),
+        median: percentile(sorted, 50.0),
+        p75: percentile(sorted, 75.0),
+        p90: percentile(sorted, 90.0),
+        p99: percentile(sorted, 99.0),
+        max: *sorted.last().unwrap(),
+        mean: sum as f64 / sorted.len() as f64,
+        considered_once,
+    }
 }
 
 fn merge_tracking(trackings: Vec<AdvEdgeTracking>) -> AdvEdgeTracking {
@@ -169,7 +213,7 @@ fn run_analysis(
     let tracking = merge_tracking(per_thread_tracking);
     let used_edge_count = tracking.used_edges.len();
 
-    let mut adversarial_edges_raw: Vec<(usize, usize, u32)> = tracking
+    let adversarial_edges_raw: Vec<(usize, usize, u32)> = tracking
         .edge_consider_counts
         .iter()
         .filter(|((src, dst), _)| !tracking.used_edges.contains(&(*src, *dst)))
@@ -177,49 +221,16 @@ fn run_analysis(
         .collect();
 
     let adversarial_edge_count = adversarial_edges_raw.len();
+    let (top_adversarial_edges, adversarial_consideration_counts) =
+        edge_report(adversarial_edges_raw);
 
-    // Sort descending by count for the top-1000 list, then ascending for percentiles.
-    adversarial_edges_raw.sort_unstable_by(|a, b| b.2.cmp(&a.2));
-
-    let top_adversarial_edges: Vec<AdversarialEdge> = adversarial_edges_raw
+    let used_edges_raw: Vec<(usize, usize, u32)> = tracking
+        .edge_consider_counts
         .iter()
-        .take(1000)
-        .map(|&(src, dst, times_considered)| AdversarialEdge { src, dst, times_considered })
+        .filter(|((src, dst), _)| tracking.used_edges.contains(&(*src, *dst)))
+        .map(|(&(src, dst), &count)| (src, dst, count))
         .collect();
-
-    let mut adversarial_counts: Vec<u32> = adversarial_edges_raw
-        .iter()
-        .map(|&(_, _, count)| count)
-        .collect();
-    adversarial_counts.sort_unstable();
-
-    let consideration_counts = if adversarial_counts.is_empty() {
-        ConsiderationCountStats {
-            min: 0,
-            p25: 0,
-            median: 0,
-            p75: 0,
-            p90: 0,
-            p99: 0,
-            max: 0,
-            mean: 0.0,
-            considered_once: 0,
-        }
-    } else {
-        let sum: u64 = adversarial_counts.iter().map(|&c| c as u64).sum();
-        let considered_once = adversarial_counts.iter().filter(|&&c| c == 1).count();
-        ConsiderationCountStats {
-            min: adversarial_counts[0],
-            p25: percentile(&adversarial_counts, 25.0),
-            median: percentile(&adversarial_counts, 50.0),
-            p75: percentile(&adversarial_counts, 75.0),
-            p90: percentile(&adversarial_counts, 90.0),
-            p99: percentile(&adversarial_counts, 99.0),
-            max: *adversarial_counts.last().unwrap(),
-            mean: sum as f64 / adversarial_counts.len() as f64,
-            considered_once,
-        }
-    };
+    let (top_used_edges, used_consideration_counts) = edge_report(used_edges_raw);
 
     let adversarial_fraction = if total_graph_edges > 0 {
         adversarial_edge_count as f64 / total_graph_edges as f64
@@ -243,8 +254,10 @@ fn run_analysis(
         used_edges: used_edge_count,
         adversarial_edges: adversarial_edge_count,
         adversarial_fraction,
-        consideration_counts,
+        adversarial_consideration_counts,
+        used_consideration_counts,
         top_adversarial_edges,
+        top_used_edges,
     }
 }
 
