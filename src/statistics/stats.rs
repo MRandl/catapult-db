@@ -1,22 +1,23 @@
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 
 /// Per-(src, dst) edge tracking data collected during beam search.
 ///
 /// Enabled only when adversarial edge analysis is requested; not tracked in normal runs.
-/// **Not merged** by `Stats::merge` — use single-threaded search when this is active.
+/// **Not merged** by `Stats::merge` — merge manually via union/sum after joining threads.
 pub struct AdvEdgeTracking {
-    /// How many times each directed graph edge (src, dst) had its distance computed.
+    /// How many times each directed graph edge (src, dst) had its distance computed,
+    /// i.e. src was expanded and dst is in src's neighbor list.
     pub edge_consider_counts: HashMap<(usize, usize), u32>,
-    /// Set of directed edges (src, dst) that were actually inserted into a candidate set
-    /// at least once across all queries.
-    pub used_edges: HashSet<(usize, usize)>,
+    /// How many times each edge (src, dst) was "used": both src and dst visited in the same search.
+    /// Accumulated across all queries via summation.
+    pub used_edge_counts: HashMap<(usize, usize), u32>,
 }
 
 impl AdvEdgeTracking {
     pub fn new() -> Self {
         Self {
             edge_consider_counts: HashMap::new(),
-            used_edges: HashSet::new(),
+            used_edge_counts: HashMap::new(),
         }
     }
 }
@@ -79,11 +80,11 @@ impl Stats {
         }
     }
 
-    /// Records that the directed graph edge (src→dst) was inserted into a candidate set.
+    /// Records that edge (src→dst) was used: both src and dst were visited in the same search.
     /// No-op if tracking is not enabled.
     pub fn record_used_edge(&mut self, src: usize, dst: usize) {
         if let Some(t) = self.adv_tracking.as_mut() {
-            t.used_edges.insert((src, dst));
+            *t.used_edge_counts.entry((src, dst)).or_insert(0) += 1;
         }
     }
 

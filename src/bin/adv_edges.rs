@@ -72,6 +72,14 @@ struct AdversarialEdge {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+struct UsedEdge {
+    src: usize,
+    dst: usize,
+    times_considered: u32,
+    times_used: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct RunResult {
     mode: String,
     seed: u64,
@@ -83,10 +91,12 @@ struct RunResult {
     adversarial_fraction: f64,
     /// Distribution of consideration counts for adversarial (never-inserted) edges
     adversarial_consideration_counts: ConsiderationCountStats,
-    /// Distribution of consideration counts for used (at least once inserted) edges
+    /// Distribution of consideration counts for used edges
     used_consideration_counts: ConsiderationCountStats,
+    /// Distribution of times-used counts for used edges
+    used_use_counts: ConsiderationCountStats,
     top_adversarial_edges: Vec<AdversarialEdge>,
-    top_used_edges: Vec<AdversarialEdge>,
+    top_used_edges: Vec<UsedEdge>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -156,7 +166,9 @@ fn merge_tracking(trackings: Vec<AdvEdgeTracking>) -> AdvEdgeTracking {
         for (key, count) in t.edge_consider_counts {
             *merged.edge_consider_counts.entry(key).or_insert(0) += count;
         }
-        merged.used_edges.extend(t.used_edges);
+        for (key, count) in t.used_edge_counts {
+            *merged.used_edge_counts.entry(key).or_insert(0) += count;
+        }
     }
     merged
 }
@@ -211,12 +223,13 @@ fn run_analysis(
     }
 
     let tracking = merge_tracking(per_thread_tracking);
-    let used_edge_count = tracking.used_edges.len();
 
+    // An edge (src, dst) is "used" if both src and dst were visited in the same search,
+    // in at least one query.
     let adversarial_edges_raw: Vec<(usize, usize, u32)> = tracking
         .edge_consider_counts
         .iter()
-        .filter(|((src, dst), _)| !tracking.used_edges.contains(&(*src, *dst)))
+        .filter(|&(&(src, dst), _)| !tracking.used_edge_counts.contains_key(&(src, dst)))
         .map(|(&(src, dst), &count)| (src, dst, count))
         .collect();
 
@@ -224,13 +237,35 @@ fn run_analysis(
     let (top_adversarial_edges, adversarial_consideration_counts) =
         edge_report(adversarial_edges_raw);
 
-    let used_edges_raw: Vec<(usize, usize, u32)> = tracking
-        .edge_consider_counts
+    // For used edges, join edge_consider_counts with used_edge_counts to get both metrics.
+    let mut used_edges_raw: Vec<(usize, usize, u32, u32)> = tracking
+        .used_edge_counts
         .iter()
-        .filter(|((src, dst), _)| tracking.used_edges.contains(&(*src, *dst)))
-        .map(|(&(src, dst), &count)| (src, dst, count))
+        .map(|(&(src, dst), &times_used)| {
+            let times_considered = tracking.edge_consider_counts
+                .get(&(src, dst))
+                .copied()
+                .unwrap_or(0);
+            (src, dst, times_considered, times_used)
+        })
         .collect();
-    let (top_used_edges, used_consideration_counts) = edge_report(used_edges_raw);
+
+    let used_edge_count = used_edges_raw.len();
+
+    // Sort descending by times_used for the top-1000 list.
+    used_edges_raw.sort_unstable_by(|a, b| b.3.cmp(&a.3));
+
+    let top_used_edges: Vec<UsedEdge> = used_edges_raw.iter().take(1000)
+        .map(|&(src, dst, times_considered, times_used)| UsedEdge { src, dst, times_considered, times_used })
+        .collect();
+
+    let mut used_consider_counts: Vec<u32> = used_edges_raw.iter().map(|&(_, _, c, _)| c).collect();
+    used_consider_counts.sort_unstable();
+    let used_consideration_counts = counts_stats(&used_consider_counts);
+
+    let mut use_counts: Vec<u32> = used_edges_raw.iter().map(|&(_, _, _, u)| u).collect();
+    use_counts.sort_unstable();
+    let used_use_counts = counts_stats(&use_counts);
 
     let adversarial_fraction = if total_graph_edges > 0 {
         adversarial_edge_count as f64 / total_graph_edges as f64
@@ -256,6 +291,7 @@ fn run_analysis(
         adversarial_fraction,
         adversarial_consideration_counts,
         used_consideration_counts,
+        used_use_counts,
         top_adversarial_edges,
         top_used_edges,
     }

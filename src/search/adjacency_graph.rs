@@ -203,17 +203,7 @@ where
                 stats,
             );
 
-            if stats.has_adv_tracking() {
-                let src = best_candidate_node.index.internal;
-                let inserted = candidates.insert_batch_tracked(&neighbor_distances);
-                for (is_inserted, candidate) in inserted.iter().zip(neighbor_distances.iter()) {
-                    if *is_inserted {
-                        stats.record_used_edge(src, candidate.index.internal);
-                    }
-                }
-            } else {
-                candidates.insert_batch(&neighbor_distances);
-            }
+            candidates.insert_batch(&neighbor_distances);
 
             // mark our current node as visited (not to be expanded again)
             visited.insert(best_candidate_node.index);
@@ -225,6 +215,18 @@ where
                 .filter(|&elem| !visited.contains(&elem.index))
                 .min()
                 .copied()
+        }
+
+        // Post-search: record used edges — (src, dst) where both src and dst were visited
+        // in this search. Done once per search to avoid cross-query contamination.
+        if stats.has_adv_tracking() {
+            for &src in &visited {
+                for &dst in self.adjacency[src.internal].neighbors.to_slice().iter() {
+                    if visited.contains(&dst) {
+                        stats.record_used_edge(src.internal, dst.internal);
+                    }
+                }
+            }
         }
 
         // we have beam_width neighbors, we only need k so we need to rerank
