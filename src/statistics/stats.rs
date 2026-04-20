@@ -22,6 +22,12 @@ impl AdvEdgeTracking {
     }
 }
 
+impl Default for AdvEdgeTracking {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Performance statistics for tracking beam search operations.
 ///
 /// Collects metrics about search efficiency including the number of searches performed,

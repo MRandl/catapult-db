@@ -155,6 +155,7 @@ fn parallel_beam_search(
     (results, combined_stats)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_search_job(
     graph: Arc<AdjacencyGraph<LruSet>>,
     queries: Arc<Vec<Vec<AlignedBlock>>>,

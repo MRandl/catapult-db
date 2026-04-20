@@ -96,9 +96,9 @@ impl PStableHashingBlock {
 
         for i in (0..dims_per_k).rev() {
             let mask = 1u128 << i;
-            for j in 0..hh.len() {
+            for &item in &hh {
                 zint_res <<= 1;
-                if (Self::irelu(hh[j]) & mask) != 0 {
+                if (Self::irelu(item) & mask) != 0 {
                     zint_res |= 1;
                 }
             }
