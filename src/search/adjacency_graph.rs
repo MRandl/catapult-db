@@ -3,8 +3,7 @@ use hashbrown::HashSet;
 use crate::{
     numerics::{AlignedBlock, VectorLike},
     search::{
-        NodeId,
-        graph_algo::{FlatCatapultChoice, FlatSearch, GraphSearchAlgorithm},
+        CatapultChoice, NodeId,
         hash_start::{
             EngineStarter, StartingPoints,
             zorder_index::{LSH_APG_REDUNDANCY, ZOrderIndex},
@@ -13,8 +12,7 @@ use crate::{
     },
     sets::{
         candidates::{CandidateEntry, SmallestKCandidates},
-        catapults::CatapultEvictingStructure,
-        fixed::{FixedSet, FlatFixedSet},
+        catapults::CatapultEvictionPolicy,
     },
     statistics::Stats,
 };
@@ -41,20 +39,19 @@ use crate::{
 /// 3. Repeatedly expands the best unvisited candidate, adding its neighbors
 /// 4. Stops when all candidates in the beam have been visited
 /// 5. Caches the best result as a catapult for future similar queries
-pub struct AdjacencyGraph<EvictPolicy, Algo>
+pub struct AdjacencyGraph<EvictPolicy>
 where
-    EvictPolicy: CatapultEvictingStructure,
-    Algo: GraphSearchAlgorithm,
+    EvictPolicy: CatapultEvictionPolicy,
 {
-    adjacency: Vec<Node<Algo::FixedSetType>>,
-    starter: Algo::StartingPointSelector<EvictPolicy>,
-    catapults: Algo::CatapultChoice,
+    adjacency: Vec<Node>,
+    starter: EngineStarter<EvictPolicy>,
+    catapults: CatapultChoice,
     lshapg: Option<[ZOrderIndex; LSH_APG_REDUNDANCY]>,
 }
 
-impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
+impl<EvictPolicy> AdjacencyGraph<EvictPolicy>
 where
-    EvictPolicy: CatapultEvictingStructure,
+    EvictPolicy: CatapultEvictionPolicy,
 {
     /// Creates a new flat (single-layer) adjacency graph for ANN search.
     ///
@@ -66,9 +63,9 @@ where
     /// # Returns
     /// A new `AdjacencyGraph` instance ready for beam search
     pub fn new_flat(
-        adj: Vec<Node<FlatFixedSet>>,
+        adj: Vec<Node>,
         engine: EngineStarter<EvictPolicy>,
-        catapults: FlatCatapultChoice,
+        catapults: CatapultChoice,
         lshapg: Option<[ZOrderIndex; LSH_APG_REDUNDANCY]>,
     ) -> Self {
         Self {
@@ -80,10 +77,9 @@ where
     }
 }
 
-impl<EvictPolicy, SearchAlgo> AdjacencyGraph<EvictPolicy, SearchAlgo>
+impl<EvictPolicy> AdjacencyGraph<EvictPolicy>
 where
-    EvictPolicy: CatapultEvictingStructure,
-    SearchAlgo: GraphSearchAlgorithm,
+    EvictPolicy: CatapultEvictionPolicy,
 {
     /// Computes distances from the query to a set of node indices.
     ///
@@ -238,9 +234,9 @@ where
     }
 }
 
-impl<EvictPolicy> AdjacencyGraph<EvictPolicy, FlatSearch>
+impl<EvictPolicy> AdjacencyGraph<EvictPolicy>
 where
-    EvictPolicy: CatapultEvictingStructure,
+    EvictPolicy: CatapultEvictionPolicy,
 {
     /// Performs approximate k-nearest neighbor search using LSH-accelerated beam search.
     ///
@@ -303,7 +299,7 @@ where
         let search_results = self.beam_search_raw(query, &distances, k, beam_width, stats);
         let best_result = search_results[0].index;
 
-        if self.catapults.local_enabled() && self.lshapg.is_none() {
+        if self.catapults.enabled() && self.lshapg.is_none() {
             self.starter
                 .new_catapult(hash_search.signature, best_result);
             if search_results.iter().any(|e| e.has_catapult_ancestor) {
@@ -332,7 +328,10 @@ where
 
     /// Returns the total number of directed edges in the graph (sum of all neighbor list lengths).
     pub fn total_edge_count(&self) -> usize {
-        self.adjacency.iter().map(|n| n.neighbors.to_slice().len()).sum()
+        self.adjacency
+            .iter()
+            .map(|n| n.neighbors.to_slice().len())
+            .sum()
     }
 }
 
@@ -340,10 +339,7 @@ where
 mod tests {
     use crate::{
         numerics::SIMD_LANECOUNT,
-        search::{
-            graph_algo::{FlatCatapultChoice, FlatSearch},
-            hash_start::{EngineStarter, EngineStarterParams},
-        },
+        search::hash_start::{EngineStarter, EngineStarterParams},
         sets::{catapults::LruSet, fixed::FlatFixedSet},
     };
 
@@ -355,7 +351,7 @@ mod tests {
     // Nodes: 0 (pos 0), 1 (pos 10), 2 (pos 20), 3 (pos 30), 4 (pos 40)
     // Edges: 0 -> 1 -> 2 -> 3 -> 4
     // Query: 11.0
-    fn setup_simple_graph(catapults_enabled: bool) -> AdjacencyGraph<LruSet, FlatSearch> {
+    fn setup_simple_graph(catapults_enabled: bool) -> AdjacencyGraph<LruSet> {
         let nodes = vec![
             // 0: Pos 0.0, Neighbors: [1]
             Node {
@@ -384,9 +380,9 @@ mod tests {
             },
         ];
         let catapult_choice = if catapults_enabled {
-            FlatCatapultChoice::CatapultsEnabled
+            CatapultChoice::CatapultsEnabled
         } else {
-            FlatCatapultChoice::CatapultsDisabled
+            CatapultChoice::CatapultsDisabled
         };
         // Start from node 0
         let params = EngineStarterParams::new(
@@ -505,7 +501,7 @@ mod tests {
         let graph = AdjacencyGraph::new_flat(
             nodes,
             TestEngineStarter::new(params),
-            FlatCatapultChoice::CatapultsEnabled,
+            CatapultChoice::CatapultsEnabled,
             None,
         );
         let query = vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])];
@@ -523,7 +519,7 @@ mod tests {
     #[test]
     fn test_complex_search_divergence() {
         // Query target: [0.0]
-        let nodes: Vec<Node<FlatFixedSet>> = vec![
+        let nodes: Vec<Node> = vec![
             // 0: Pos 10.0, Dist 100. N: [1, 5]. (Start point)
             Node {
                 payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
@@ -560,7 +556,7 @@ mod tests {
         let graph = AdjacencyGraph::new_flat(
             nodes,
             TestEngineStarter::new(params),
-            FlatCatapultChoice::CatapultsEnabled,
+            CatapultChoice::CatapultsEnabled,
             None,
         );
         let query = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])];

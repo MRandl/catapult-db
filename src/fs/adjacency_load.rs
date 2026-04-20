@@ -1,14 +1,13 @@
 use crate::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
     search::{
-        AdjacencyGraph, Node, NodeId, RunningMode,
-        graph_algo::{FlatCatapultChoice, FlatSearch},
+        AdjacencyGraph, CatapultChoice, Node, NodeId, RunningMode,
         hash_start::{
             EngineStarter, EngineStarterParams,
             zorder_index::{LSH_APG_REDUNDANCY, ZOrderIndex},
         },
     },
-    sets::{catapults::CatapultEvictingStructure, fixed::FlatFixedSet},
+    sets::{catapults::CatapultEvictionPolicy, fixed::FlatFixedSet},
 };
 
 use std::{
@@ -19,7 +18,7 @@ use std::{
 };
 use tracing::info_span;
 
-impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
+impl<T: CatapultEvictionPolicy> AdjacencyGraph<T> {
     /// Reads the next N bytes from a byte iterator.
     ///
     /// # Arguments
@@ -239,7 +238,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         AdjacencyGraph::new_flat(
             adjacency,
             EngineStarter::<T>::new(engine_params),
-            FlatCatapultChoice::from_bool(running_mode == RunningMode::Catapult),
+            CatapultChoice::from_bool(running_mode == RunningMode::Catapult),
             lshapg,
         )
     }
@@ -248,7 +247,7 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        search::{AdjacencyGraph, RunningMode::Catapult, graph_algo::FlatSearch},
+        search::{AdjacencyGraph, RunningMode::Catapult},
         sets::catapults::LruSet,
     };
 
@@ -257,7 +256,7 @@ mod tests {
         let graph_path = "test_index/ann";
         let payload_path = "test_index/ann_vectors.bin";
 
-        let graphed1 = AdjacencyGraph::<LruSet, FlatSearch>::load_flat_from_path(
+        let graphed1 = AdjacencyGraph::<LruSet>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
             4, // num_hash
@@ -266,7 +265,7 @@ mod tests {
             Catapult, // enabled_catapults
         );
 
-        let graphed2 = AdjacencyGraph::<LruSet, FlatSearch>::load_flat_from_path(
+        let graphed2 = AdjacencyGraph::<LruSet>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
             4, // num_hash

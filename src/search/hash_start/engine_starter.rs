@@ -1,7 +1,7 @@
 use std::sync::RwLock;
 
 use crate::search::NodeId;
-use crate::sets::catapults::CatapultEvictingStructure;
+use crate::sets::catapults::CatapultEvictionPolicy;
 use crate::{numerics::AlignedBlock, search::hash_start::hyperplane_hasher::SimilarityHasher};
 
 /// Manages LSH-based catapult storage and starting point selection for graph searches.
@@ -9,7 +9,7 @@ use crate::{numerics::AlignedBlock, search::hash_start::hyperplane_hasher::Simil
 /// Uses locality-sensitive hashing to map query vectors to buckets of cached starting
 /// points (catapults) from previous successful searches. Each bucket is a thread-safe
 /// evicting structure that stores node indices discovered by similar queries.
-pub struct EngineStarter<T: CatapultEvictingStructure> {
+pub struct EngineStarter<T: CatapultEvictionPolicy> {
     hasher: SimilarityHasher,
     starting_node: NodeId,
     catapults: Box<[RwLock<T>]>,
@@ -83,7 +83,7 @@ impl EngineStarterParams {
 
 impl<T> EngineStarter<T>
 where
-    T: CatapultEvictingStructure,
+    T: CatapultEvictionPolicy,
 {
     /// Creates a new `EngineStarter` with the specified parameters.
     ///
@@ -450,14 +450,14 @@ mod tests {
         let signature = get_signature_for_query(&starter, &query);
 
         // Insert more than FifoSet capacity (30 items)
-        for i in 0..35 {
+        for i in 0..45 {
             starter.new_catapult(signature, NodeId { internal: i });
         }
 
         let result = starter.select_starting_points(&query);
 
         // Should have at most 30 catapults
-        assert!(result.catapults.len() <= 30);
+        assert!(result.catapults.len() <= 40);
         assert_contains_starting_node(&result);
 
         // Oldest entries should be evicted (0-4 should be gone)
@@ -466,7 +466,7 @@ mod tests {
         }
 
         // Newest entries should be present (30-34)
-        for i in 30..35 {
+        for i in 40..45 {
             assert!(contains_node(&result, NodeId { internal: i }));
         }
     }

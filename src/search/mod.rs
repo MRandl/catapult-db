@@ -11,13 +11,14 @@
 //! - [`graph_algo`]: Search algorithm trait definitions and implementations
 //! - [`hash_start`]: LSH-based catapult management for starting point selection
 
-pub mod graph_algo;
 pub mod hash_start;
 
 mod adjacency_graph;
+mod catapult_choice;
 mod node;
 mod running_mode;
 
 pub use adjacency_graph::*;
+pub use catapult_choice::*;
 pub use node::*;
 pub use running_mode::*;

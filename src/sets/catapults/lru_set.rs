@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::{search::NodeId, sets::catapults::CatapultEvictingStructure};
+use crate::{search::NodeId, sets::catapults::CatapultEvictionPolicy};
 
 /// An LRU (Least Recently Used) catapult storage structure with deduplication.
 ///
@@ -35,7 +35,7 @@ impl LruSet {
     }
 }
 
-impl CatapultEvictingStructure for LruSet {
+impl CatapultEvictionPolicy for LruSet {
     fn to_vec(&self) -> Vec<NodeId> {
         self.queue.iter().copied().collect()
     }
