@@ -1,7 +1,7 @@
 use catapult::{
     fs::Queries,
     numerics::AlignedBlock,
-    search::{AdjacencyGraph, RunningMode, graph_algo::FlatSearch},
+    search::{AdjacencyGraph, RunningMode},
     sets::catapults::LruSet,
     statistics::Stats,
 };
@@ -97,7 +97,7 @@ struct Args {
 /// Runs beam search over all queries using a thread pool with work-stealing batches.
 /// Returns results sorted by query index and aggregate stats.
 fn parallel_beam_search(
-    graph: &Arc<AdjacencyGraph<LruSet, FlatSearch>>,
+    graph: &Arc<AdjacencyGraph<LruSet>>,
     queries: &Arc<Vec<Vec<AlignedBlock>>>,
     num_threads: usize,
     beam_width: usize,
@@ -156,7 +156,7 @@ fn parallel_beam_search(
 }
 
 fn run_search_job(
-    graph: Arc<AdjacencyGraph<LruSet, FlatSearch>>,
+    graph: Arc<AdjacencyGraph<LruSet>>,
     queries: Arc<Vec<Vec<AlignedBlock>>>,
     num_threads: usize,
     beam_width: usize,
@@ -292,7 +292,7 @@ fn main() {
         );
         let full_graph = {
             let _span = info_span!("load_graph", seed, num_hash = NUM_HASH, bucket_cap = BUCKET_SIZE, mode = %args.mode).entered();
-            Arc::new(AdjacencyGraph::<LruSet, FlatSearch>::load_flat_from_path(
+            Arc::new(AdjacencyGraph::<LruSet>::load_flat_from_path(
                 PathBuf::from_str(&args.graph).unwrap(),
                 PathBuf::from_str(&args.payload).unwrap(),
                 NUM_HASH,

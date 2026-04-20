@@ -3,11 +3,8 @@ use hashbrown::HashSet;
 use crate::{
     numerics::{AlignedBlock, VectorLike},
     search::{
-        CatapultChoice, NodeId,
-        hash_start::{
-            EngineStarter, StartingPoints,
-            zorder_index::{LSH_APG_REDUNDANCY, ZOrderIndex},
-        },
+        NodeId, SearchStrategy,
+        hash_start::{EngineStarter, StartingPoints},
         node::Node,
     },
     sets::{
@@ -45,8 +42,7 @@ where
 {
     adjacency: Vec<Node>,
     starter: EngineStarter<EvictPolicy>,
-    catapults: CatapultChoice,
-    lshapg: Option<[ZOrderIndex; LSH_APG_REDUNDANCY]>,
+    strategy: SearchStrategy,
 }
 
 impl<EvictPolicy> AdjacencyGraph<EvictPolicy>
@@ -62,17 +58,11 @@ where
     ///
     /// # Returns
     /// A new `AdjacencyGraph` instance ready for beam search
-    pub fn new_flat(
-        adj: Vec<Node>,
-        engine: EngineStarter<EvictPolicy>,
-        catapults: CatapultChoice,
-        lshapg: Option<[ZOrderIndex; LSH_APG_REDUNDANCY]>,
-    ) -> Self {
+    pub fn new_flat(adj: Vec<Node>, engine: EngineStarter<EvictPolicy>, strategy: SearchStrategy) -> Self {
         Self {
             adjacency: adj,
             starter: engine,
-            catapults,
-            lshapg,
+            strategy,
         }
     }
 }
@@ -267,7 +257,7 @@ where
         beam_width: usize,
         stats: &mut Stats,
     ) -> Vec<CandidateEntry> {
-        let hash_search = if let Some(lsh_apg) = &self.lshapg {
+        let hash_search = if let SearchStrategy::LshApg(lsh_apg) = &self.strategy {
             let mut lshapg_candidates = Vec::new();
             for candidate_set in lsh_apg
                 .iter()
@@ -299,7 +289,7 @@ where
         let search_results = self.beam_search_raw(query, &distances, k, beam_width, stats);
         let best_result = search_results[0].index;
 
-        if self.catapults.enabled() && self.lshapg.is_none() {
+        if matches!(self.strategy, SearchStrategy::Catapult) {
             self.starter
                 .new_catapult(hash_search.signature, best_result);
             if search_results.iter().any(|e| e.has_catapult_ancestor) {
@@ -339,7 +329,7 @@ where
 mod tests {
     use crate::{
         numerics::SIMD_LANECOUNT,
-        search::hash_start::{EngineStarter, EngineStarterParams},
+        search::{SearchStrategy, hash_start::{EngineStarter, EngineStarterParams}},
         sets::{catapults::LruSet, fixed::FlatFixedSet},
     };
 
@@ -379,11 +369,7 @@ mod tests {
                 neighbors: FlatFixedSet::new(vec![1]),
             },
         ];
-        let catapult_choice = if catapults_enabled {
-            CatapultChoice::CatapultsEnabled
-        } else {
-            CatapultChoice::CatapultsDisabled
-        };
+        let strategy = if catapults_enabled { SearchStrategy::Catapult } else { SearchStrategy::Vanilla };
         // Start from node 0
         let params = EngineStarterParams::new(
             4,
@@ -393,7 +379,7 @@ mod tests {
             42,
             catapults_enabled,
         );
-        AdjacencyGraph::new_flat(nodes, EngineStarter::new(params), catapult_choice, None)
+        AdjacencyGraph::new_flat(nodes, EngineStarter::new(params), strategy)
     }
 
     #[test]
@@ -498,12 +484,7 @@ mod tests {
         // Start points: 0, 2
         let params =
             EngineStarterParams::new(4, 40, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, true);
-        let graph = AdjacencyGraph::new_flat(
-            nodes,
-            TestEngineStarter::new(params),
-            CatapultChoice::CatapultsEnabled,
-            None,
-        );
+        let graph = AdjacencyGraph::new_flat(nodes, TestEngineStarter::new(params), SearchStrategy::Catapult);
         let query = vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])];
         let k = 2;
         let beam_width = 3;
@@ -553,12 +534,7 @@ mod tests {
         ];
         let params =
             EngineStarterParams::new(4, 40, SIMD_LANECOUNT, NodeId { internal: 1 }, 42, true);
-        let graph = AdjacencyGraph::new_flat(
-            nodes,
-            TestEngineStarter::new(params),
-            CatapultChoice::CatapultsEnabled,
-            None,
-        );
+        let graph = AdjacencyGraph::new_flat(nodes, TestEngineStarter::new(params), SearchStrategy::Catapult);
         let query = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])];
         let k = 1;
         let beam_width = 2; // Tight beam width forces early pruning

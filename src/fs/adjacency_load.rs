@@ -1,7 +1,7 @@
 use crate::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
     search::{
-        AdjacencyGraph, CatapultChoice, Node, NodeId, RunningMode,
+        AdjacencyGraph, Node, NodeId, RunningMode, SearchStrategy,
         hash_start::{
             EngineStarter, EngineStarterParams,
             zorder_index::{LSH_APG_REDUNDANCY, ZOrderIndex},
@@ -222,25 +222,22 @@ impl<T: CatapultEvictionPolicy> AdjacencyGraph<T> {
             running_mode == RunningMode::Catapult,
         );
 
-        let lshapg = if running_mode == RunningMode::LshApg {
-            let _span = info_span!("build_lshapg_index", num_nodes = adjacency.len()).entered();
-            let w = 1.0;
-            let mut index: [ZOrderIndex; LSH_APG_REDUNDANCY] =
-                [ZOrderIndex::new(num_hash, plane_dim, seed, w)];
-            for (i, vector) in adjacency.iter().enumerate() {
-                index[0].insert(&vector.payload, NodeId { internal: i });
+        let strategy = match running_mode {
+            RunningMode::LshApg => {
+                let _span = info_span!("build_lshapg_index", num_nodes = adjacency.len()).entered();
+                let w = 1.0;
+                let mut index: [ZOrderIndex; LSH_APG_REDUNDANCY] =
+                    [ZOrderIndex::new(num_hash, plane_dim, seed, w)];
+                for (i, vector) in adjacency.iter().enumerate() {
+                    index[0].insert(&vector.payload, NodeId { internal: i });
+                }
+                SearchStrategy::LshApg(index)
             }
-            Some(index)
-        } else {
-            None
+            RunningMode::Catapult => SearchStrategy::Catapult,
+            RunningMode::Vanilla => SearchStrategy::Vanilla,
         };
 
-        AdjacencyGraph::new_flat(
-            adjacency,
-            EngineStarter::<T>::new(engine_params),
-            CatapultChoice::from_bool(running_mode == RunningMode::Catapult),
-            lshapg,
-        )
+        AdjacencyGraph::new_flat(adjacency, EngineStarter::<T>::new(engine_params), strategy)
     }
 }
 
@@ -253,8 +250,8 @@ mod tests {
 
     #[test]
     fn loading_example_graph() {
-        let graph_path = "test_index/ann";
-        let payload_path = "test_index/ann_vectors.bin";
+        let graph_path = "test/index/ann";
+        let payload_path = "test/index/ann_vectors.bin";
 
         let graphed1 = AdjacencyGraph::<LruSet>::load_flat_from_path(
             graph_path.into(),

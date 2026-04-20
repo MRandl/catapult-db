@@ -77,6 +77,6 @@ mod tests {
 
     #[test]
     fn test_load_4vecs() {
-        let _ = Vec::<Vec<AlignedBlock>>::load_from_npy("test_index/vectors.npy", None);
+        let _ = Vec::<Vec<AlignedBlock>>::load_from_npy("test/index/vectors.npy", None);
     }
 }

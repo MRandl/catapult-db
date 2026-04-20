@@ -1,7 +1,7 @@
 use catapult::{
     fs::Queries,
     numerics::AlignedBlock,
-    search::{AdjacencyGraph, RunningMode, graph_algo::FlatSearch},
+    search::{AdjacencyGraph, RunningMode},
     sets::catapults::LruSet,
     statistics::{AdvEdgeTracking, Stats},
 };
@@ -122,13 +122,19 @@ fn percentile(sorted: &[u32], p: f64) -> u32 {
 
 /// Builds the top-1000 edge list and consideration count stats from a raw (src, dst, count) set.
 /// `edges` need not be pre-sorted; this function sorts them internally.
-fn edge_report(mut edges: Vec<(usize, usize, u32)>) -> (Vec<AdversarialEdge>, ConsiderationCountStats) {
+fn edge_report(
+    mut edges: Vec<(usize, usize, u32)>,
+) -> (Vec<AdversarialEdge>, ConsiderationCountStats) {
     edges.sort_unstable_by(|a, b| b.2.cmp(&a.2));
 
     let top: Vec<AdversarialEdge> = edges
         .iter()
         .take(1000)
-        .map(|&(src, dst, times_considered)| AdversarialEdge { src, dst, times_considered })
+        .map(|&(src, dst, times_considered)| AdversarialEdge {
+            src,
+            dst,
+            times_considered,
+        })
         .collect();
 
     let mut counts: Vec<u32> = edges.iter().map(|&(_, _, c)| c).collect();
@@ -141,7 +147,14 @@ fn edge_report(mut edges: Vec<(usize, usize, u32)>) -> (Vec<AdversarialEdge>, Co
 fn counts_stats(sorted: &[u32]) -> ConsiderationCountStats {
     if sorted.is_empty() {
         return ConsiderationCountStats {
-            min: 0, p25: 0, median: 0, p75: 0, p90: 0, p99: 0, max: 0, mean: 0.0,
+            min: 0,
+            p25: 0,
+            median: 0,
+            p75: 0,
+            p90: 0,
+            p99: 0,
+            max: 0,
+            mean: 0.0,
             considered_once: 0,
         };
     }
@@ -174,7 +187,7 @@ fn merge_tracking(trackings: Vec<AdvEdgeTracking>) -> AdvEdgeTracking {
 }
 
 fn run_analysis(
-    graph: &Arc<AdjacencyGraph<LruSet, FlatSearch>>,
+    graph: &Arc<AdjacencyGraph<LruSet>>,
     queries: &Arc<Vec<Vec<AlignedBlock>>>,
     beam_width: usize,
     num_threads: usize,
@@ -242,7 +255,8 @@ fn run_analysis(
         .used_edge_counts
         .iter()
         .map(|(&(src, dst), &times_used)| {
-            let times_considered = tracking.edge_consider_counts
+            let times_considered = tracking
+                .edge_consider_counts
                 .get(&(src, dst))
                 .copied()
                 .unwrap_or(0);
@@ -255,8 +269,15 @@ fn run_analysis(
     // Sort descending by times_used for the top-1000 list.
     used_edges_raw.sort_unstable_by(|a, b| b.3.cmp(&a.3));
 
-    let top_used_edges: Vec<UsedEdge> = used_edges_raw.iter().take(1000)
-        .map(|&(src, dst, times_considered, times_used)| UsedEdge { src, dst, times_considered, times_used })
+    let top_used_edges: Vec<UsedEdge> = used_edges_raw
+        .iter()
+        .take(1000)
+        .map(|&(src, dst, times_considered, times_used)| UsedEdge {
+            src,
+            dst,
+            times_considered,
+            times_used,
+        })
         .collect();
 
     let mut used_consider_counts: Vec<u32> = used_edges_raw.iter().map(|&(_, _, c, _)| c).collect();
@@ -327,7 +348,7 @@ fn main() {
         for &seed in &args.seeds {
             eprintln!("\n--- mode={} seed={} ---", mode, seed);
             eprintln!("  Loading graph...");
-            let graph = Arc::new(AdjacencyGraph::<LruSet, FlatSearch>::load_flat_from_path(
+            let graph = Arc::new(AdjacencyGraph::<LruSet>::load_flat_from_path(
                 PathBuf::from_str(&args.graph).unwrap(),
                 PathBuf::from_str(&args.payload).unwrap(),
                 NUM_HASH,
