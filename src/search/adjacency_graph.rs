@@ -58,7 +58,11 @@ where
     ///
     /// # Returns
     /// A new `AdjacencyGraph` instance ready for beam search
-    pub fn new_flat(adj: Vec<Node>, engine: EngineStarter<EvictPolicy>, strategy: SearchStrategy) -> Self {
+    pub fn new_flat(
+        adj: Vec<Node>,
+        engine: EngineStarter<EvictPolicy>,
+        strategy: SearchStrategy,
+    ) -> Self {
         Self {
             adjacency: adj,
             starter: engine,
@@ -329,7 +333,10 @@ where
 mod tests {
     use crate::{
         numerics::SIMD_LANECOUNT,
-        search::{SearchStrategy, hash_start::{EngineStarter, EngineStarterParams}},
+        search::{
+            SearchStrategy,
+            hash_start::{EngineStarter, EngineStarterParams},
+        },
         sets::{catapults::LruSet, fixed::FlatFixedSet},
     };
 
@@ -369,7 +376,11 @@ mod tests {
                 neighbors: FlatFixedSet::new(vec![1]),
             },
         ];
-        let strategy = if catapults_enabled { SearchStrategy::Catapult } else { SearchStrategy::Vanilla };
+        let strategy = if catapults_enabled {
+            SearchStrategy::Catapult
+        } else {
+            SearchStrategy::Vanilla
+        };
         // Start from node 0
         let params = EngineStarterParams::new(
             4,
@@ -484,7 +495,11 @@ mod tests {
         // Start points: 0, 2
         let params =
             EngineStarterParams::new(4, 40, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, true);
-        let graph = AdjacencyGraph::new_flat(nodes, TestEngineStarter::new(params), SearchStrategy::Catapult);
+        let graph = AdjacencyGraph::new_flat(
+            nodes,
+            TestEngineStarter::new(params),
+            SearchStrategy::Catapult,
+        );
         let query = vec![AlignedBlock::new([1.0; SIMD_LANECOUNT])];
         let k = 2;
         let beam_width = 3;
@@ -534,7 +549,11 @@ mod tests {
         ];
         let params =
             EngineStarterParams::new(4, 40, SIMD_LANECOUNT, NodeId { internal: 1 }, 42, true);
-        let graph = AdjacencyGraph::new_flat(nodes, TestEngineStarter::new(params), SearchStrategy::Catapult);
+        let graph = AdjacencyGraph::new_flat(
+            nodes,
+            TestEngineStarter::new(params),
+            SearchStrategy::Catapult,
+        );
         let query = vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])];
         let k = 1;
         let beam_width = 2; // Tight beam width forces early pruning
