@@ -1,32 +1,4 @@
-use hashbrown::HashMap;
-
-/// Per-(src, dst) edge tracking data collected during beam search.
-///
-/// Enabled only when adversarial edge analysis is requested; not tracked in normal runs.
-/// **Not merged** by `Stats::merge` — merge manually via union/sum after joining threads.
-pub struct AdvEdgeTracking {
-    /// How many times each directed graph edge (src, dst) had its distance computed,
-    /// i.e. src was expanded and dst is in src's neighbor list.
-    pub edge_consider_counts: HashMap<(usize, usize), u32>,
-    /// How many times each edge (src, dst) was "used": both src and dst visited in the same search.
-    /// Accumulated across all queries via summation.
-    pub used_edge_counts: HashMap<(usize, usize), u32>,
-}
-
-impl AdvEdgeTracking {
-    pub fn new() -> Self {
-        Self {
-            edge_consider_counts: HashMap::new(),
-            used_edge_counts: HashMap::new(),
-        }
-    }
-}
-
-impl Default for AdvEdgeTracking {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+use crate::statistics::AdvEdgeTracking;
 
 /// Performance statistics for tracking beam search operations.
 ///
@@ -257,6 +229,8 @@ mod tests {
     #[test]
     fn test_bump_searches_with_catapults() {
         let mut stats = Stats::new();
+        stats.enable_adv_tracking();
+
         assert_eq!(stats.get_searches_with_catapults(), 0);
 
         stats.bump_searches_with_catapults();
@@ -267,6 +241,14 @@ mod tests {
 
         stats.bump_searches_with_catapults();
         assert_eq!(stats.get_searches_with_catapults(), 3);
+
+        let h1 = stats.adv_tracking().unwrap().edge_consider_counts.clone();
+        let h2 = stats
+            .take_adv_tracking()
+            .unwrap()
+            .edge_consider_counts
+            .clone();
+        assert!(h1 == h2);
     }
 
     #[test]

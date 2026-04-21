@@ -79,4 +79,9 @@ mod tests {
     fn test_load_4vecs() {
         let _ = Vec::<Vec<AlignedBlock>>::load_from_npy("test/index/vectors.npy", None);
     }
+
+    #[test]
+    fn test_load_4vecs_limited() {
+        let _ = Vec::<Vec<AlignedBlock>>::load_from_npy("test/index/vectors.npy", Some(2));
+    }
 }

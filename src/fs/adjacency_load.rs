@@ -1,11 +1,8 @@
 use crate::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
     search::{
-        AdjacencyGraph, Node, NodeId, RunningMode, SearchStrategy,
-        hash_start::{
-            EngineStarter, EngineStarterParams,
-            zorder_index::{LSH_APG_REDUNDANCY, ZOrderIndex},
-        },
+        AdjacencyGraph, Node, NodeId, SearchStrategy,
+        hash_start::{EngineStarter, EngineStarterParams},
     },
     sets::{catapults::CatapultEvictionPolicy, fixed::FlatFixedSet},
 };
@@ -160,7 +157,7 @@ impl<T: CatapultEvictionPolicy> AdjacencyGraph<T> {
         num_hash: usize,
         bucket_cap: usize,
         seed: u64,
-        running_mode: RunningMode,
+        running_mode: SearchStrategy,
     ) -> Self {
         let mut graph_file = BufReader::new(File::open(graph_path).expect("FNF")).bytes();
         let mut payload_file = BufReader::new(File::open(payload_path).expect("FNF")).bytes();
@@ -219,32 +216,25 @@ impl<T: CatapultEvictionPolicy> AdjacencyGraph<T> {
             plane_dim,
             entry_point_id,
             seed,
-            running_mode == RunningMode::Catapult,
+            matches!(running_mode, SearchStrategy::Catapult),
         );
 
-        let strategy = match running_mode {
-            RunningMode::LshApg => {
-                let _span = info_span!("build_lshapg_index", num_nodes = adjacency.len()).entered();
-                let w = 1.0;
-                let mut index: [ZOrderIndex; LSH_APG_REDUNDANCY] =
-                    [ZOrderIndex::new(num_hash, plane_dim, seed, w)];
-                for (i, vector) in adjacency.iter().enumerate() {
-                    index[0].insert(&vector.payload, NodeId { internal: i });
-                }
-                SearchStrategy::LshApg(index)
-            }
-            RunningMode::Catapult => SearchStrategy::Catapult,
-            RunningMode::Vanilla => SearchStrategy::Vanilla,
-        };
-
-        AdjacencyGraph::new_flat(adjacency, EngineStarter::<T>::new(engine_params), strategy)
+        AdjacencyGraph::new_flat(
+            adjacency,
+            EngineStarter::<T>::new(engine_params),
+            running_mode,
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        search::{AdjacencyGraph, RunningMode::Catapult},
+        search::{
+            AdjacencyGraph,
+            SearchStrategy::{Catapult, LshApg, Vanilla},
+            hash_start::zorder_index::ZOrderIndex,
+        },
         sets::catapults::LruSet,
     };
 
@@ -267,12 +257,21 @@ mod tests {
             payload_path.into(),
             4, // num_hash
             40,
-            42,       // seed
-            Catapult, // enabled_catapults
+            42,      // seed
+            Vanilla, // enabled_catapults
+        );
+
+        let graphed3 = AdjacencyGraph::<LruSet>::load_flat_from_path(
+            graph_path.into(),
+            payload_path.into(),
+            4, // num_hash
+            40,
+            42, // seed
+            LshApg([ZOrderIndex::new(4, 16, 4, 1.0)]),
         );
 
         assert!(graphed1.len() == 4);
         assert!(graphed2.len() == 4);
-        assert!(graphed1.len() == graphed2.len());
+        assert_eq!(graphed3.len(), 4);
     }
 }

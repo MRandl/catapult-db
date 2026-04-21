@@ -89,19 +89,19 @@ impl ZOrderIndex {
                 (Some(r), Some(l)) => r >= l,
             };
 
-            let iter: &mut dyn Iterator<Item = (&u128, &Vec<NodeId>)> =
-                if take_right { &mut right } else { &mut left };
+            let (_, nodes): (&u128, &Vec<NodeId>) = if take_right {
+                right.next().unwrap()
+            } else {
+                left.next().unwrap()
+            };
 
-            if let Some((_, nodes)) = iter.next() {
-                for &node in nodes {
-                    result.push(node);
-                    if result.len() >= k {
-                        break;
-                    }
+            for &node in nodes {
+                result.push(node);
+                if result.len() >= k {
+                    break;
                 }
             }
         }
-
         result
     }
 
@@ -203,10 +203,14 @@ mod tests {
     #[test]
     fn test_returns_all_when_fewer_than_k() {
         let mut idx = new_for_test();
-        idx.insert(&vec_of(1.0), node(1));
         idx.insert(&vec_of(2.0), node(2));
-        let result = idx.query_k_closest(&vec_of(1.0), 100);
-        assert_eq!(result.len(), 2);
+        idx.insert(&vec_of(1.0), node(1));
+        idx.insert(&vec_of(3.0), node(3));
+
+        for i in 0..5 {
+            let result = idx.query_k_closest_by_signature(i, 100);
+            assert_eq!(result.len(), 3);
+        }
     }
 
     #[test]

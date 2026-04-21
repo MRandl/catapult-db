@@ -323,6 +323,7 @@ mod tests {
         assert_eq!(result1.signature, result2.signature);
         assert_eq!(result1.catapults, result2.catapults);
         assert_eq!(result1.starting_node, result2.starting_node);
+        assert_eq!(result1.starting_node, starter.starting_node());
     }
 
     #[test]

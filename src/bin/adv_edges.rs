@@ -1,7 +1,7 @@
 use catapult::{
     fs::Queries,
     numerics::AlignedBlock,
-    search::{AdjacencyGraph, RunningMode},
+    search::{AdjacencyGraph, SearchStrategy},
     sets::catapults::LruSet,
     statistics::{AdvEdgeTracking, Stats},
 };
@@ -354,7 +354,7 @@ fn main() {
                 NUM_HASH,
                 BUCKET_SIZE,
                 seed,
-                RunningMode::from_string(mode),
+                SearchStrategy::from_string(mode, None),
             ));
             eprintln!(
                 "  Graph: {} nodes, {} edges",

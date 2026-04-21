@@ -320,7 +320,7 @@ where
         self.adjacency.len()
     }
 
-    /// Returns the total number of directed edges in the graph (sum of all neighbor list lengths).
+    /// Returns the total number of directed edges in the graph (sum of all neighbor list lengths). Does not include catapult edges.
     pub fn total_edge_count(&self) -> usize {
         self.adjacency
             .iter()
@@ -334,8 +334,8 @@ mod tests {
     use crate::{
         numerics::SIMD_LANECOUNT,
         search::{
-            SearchStrategy,
-            hash_start::{EngineStarter, EngineStarterParams},
+            LshApgArgs, SearchStrategy,
+            hash_start::{EngineStarter, EngineStarterParams, zorder_index::ZOrderIndex},
         },
         sets::{catapults::LruSet, fixed::FlatFixedSet},
     };
@@ -394,6 +394,55 @@ mod tests {
     }
 
     #[test]
+    fn lshapg() {
+        let nodes = vec![
+            // 0: Pos 0.0, Neighbors: [1]
+            Node {
+                payload: vec![AlignedBlock::new([0.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FlatFixedSet::new(vec![1]),
+            },
+            // 1: Pos 10.0, Neighbors: [2]
+            Node {
+                payload: vec![AlignedBlock::new([10.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FlatFixedSet::new(vec![2]),
+            },
+            // 2: Pos 20.0, Neighbors: [1, 3]
+            Node {
+                payload: vec![AlignedBlock::new([20.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FlatFixedSet::new(vec![1, 3]),
+            },
+            // 3: Pos 30.0, Neighbors: [4]
+            Node {
+                payload: vec![AlignedBlock::new([30.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FlatFixedSet::new(vec![4]),
+            },
+            // 4: Pos 40.0, Neighbors: [1]
+            Node {
+                payload: vec![AlignedBlock::new([40.0; SIMD_LANECOUNT])].into_boxed_slice(),
+                neighbors: FlatFixedSet::new(vec![1]),
+            },
+        ];
+        let strategy = SearchStrategy::LshApg([ZOrderIndex::new(2, 16, 0, 1.0)]);
+        // Start from node 0
+        let params =
+            EngineStarterParams::new(4, 40, SIMD_LANECOUNT, NodeId { internal: 0 }, 42, false);
+        let lshapg: AdjacencyGraph<LruSet> =
+            AdjacencyGraph::new_flat(nodes, EngineStarter::new(params), strategy);
+        let mut stats = Stats::new();
+
+        assert_eq!(
+            lshapg.beam_search(
+                &[AlignedBlock::new([40.0; SIMD_LANECOUNT])],
+                5,
+                5,
+                &mut stats
+            )[0]
+            .index,
+            NodeId { internal: 4 }
+        );
+    }
+
+    #[test]
     fn test_basic_search_path() {
         let graph = setup_simple_graph(true);
         let query = vec![AlignedBlock::new([11.0; SIMD_LANECOUNT])];
@@ -402,6 +451,7 @@ mod tests {
 
         // Distances: 0(121), 1(1), 2(81), 3(361), 4(841)
         let mut stats = crate::statistics::Stats::new();
+        stats.enable_adv_tracking();
 
         let results1 = graph.beam_search(&query, k, beam_width, &mut stats);
         let results2 = graph.beam_search(&query, k, beam_width, &mut stats);
@@ -425,7 +475,7 @@ mod tests {
             .iter()
             .map(|n| n.neighbors.to_slice().len())
             .sum();
-        assert_eq!(total_edges, 6);
+        assert_eq!(total_edges, graph.total_edge_count());
     }
 
     #[test]

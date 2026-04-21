@@ -1,7 +1,7 @@
 use catapult::{
     fs::Queries,
-    numerics::AlignedBlock,
-    search::{AdjacencyGraph, RunningMode},
+    numerics::{AlignedBlock, SIMD_LANECOUNT},
+    search::{AdjacencyGraph, LshApgArgs, SearchStrategy},
     sets::catapults::LruSet,
     statistics::Stats,
 };
@@ -282,7 +282,6 @@ fn main() {
         args.seeds.len() * args.threads.len() * args.beam_width.len()
     );
 
-    let catapults_enabled = RunningMode::from_string(&args.mode) == RunningMode::Catapult;
     let mut all_results = Vec::new();
 
     // Run cartesian product of seeds, threads, and beam_width
@@ -291,6 +290,18 @@ fn main() {
             "\n--- Loading adjacency graph with seed={}, num_hash={}, bucket_cap={} ---",
             seed, NUM_HASH, BUCKET_SIZE
         );
+
+        let apgargs = if args.mode == "lshapg" {
+            Some(LshApgArgs {
+                num_hash: NUM_HASH,
+                stored_vectors_dim: queries[0].len() * SIMD_LANECOUNT,
+                seed,
+                w: 1.0,
+            })
+        } else {
+            None
+        };
+
         let full_graph = {
             let _span = info_span!("load_graph", seed, num_hash = NUM_HASH, bucket_cap = BUCKET_SIZE, mode = %args.mode).entered();
             Arc::new(AdjacencyGraph::<LruSet>::load_flat_from_path(
@@ -299,7 +310,7 @@ fn main() {
                 NUM_HASH,
                 BUCKET_SIZE,
                 seed,
-                RunningMode::from_string(&args.mode),
+                SearchStrategy::from_string(&args.mode, apgargs),
             ))
         };
         let graph_size = full_graph.len();
@@ -317,7 +328,7 @@ fn main() {
                         Arc::clone(&queries),
                         num_threads,
                         beam_width,
-                        catapults_enabled,
+                        args.mode == "catapult",
                         seed,
                         BUCKET_SIZE,
                         NUM_HASH,
