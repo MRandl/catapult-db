@@ -1,20 +1,21 @@
 use crate::{
     numerics::{AlignedBlock, SIMD_LANECOUNT},
     search::{
-        AdjacencyGraph, Node, NodeId,
-        graph_algo::{FlatCatapultChoice, FlatSearch},
+        AdjacencyGraph, Node, NodeId, SearchStrategy,
         hash_start::{EngineStarter, EngineStarterParams},
     },
-    sets::{catapults::CatapultEvictingStructure, fixed::FlatFixedSet},
+    sets::{catapults::CatapultEvictionPolicy, fixed::FlatFixedSet},
 };
 
 use std::{
     fs::File,
     io::{BufReader, Error, Read},
     path::PathBuf,
+    vec,
 };
+use tracing::info_span;
 
-impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
+impl<T: CatapultEvictionPolicy> AdjacencyGraph<T> {
     /// Reads the next N bytes from a byte iterator.
     ///
     /// # Arguments
@@ -154,8 +155,9 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         graph_path: PathBuf,
         payload_path: PathBuf,
         num_hash: usize,
+        bucket_cap: usize,
         seed: u64,
-        enabled_catapults: bool,
+        running_mode: SearchStrategy,
     ) -> Self {
         let mut graph_file = BufReader::new(File::open(graph_path).expect("FNF")).bytes();
         let mut payload_file = BufReader::new(File::open(payload_path).expect("FNF")).bytes();
@@ -174,24 +176,27 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 
         let mut adjacency = Vec::new();
 
-        while let Some(pointsize) = Self::next_u32(&mut graph_file) {
-            let mut neighs = vec![];
+        {
+            let _span = info_span!("parse_nodes", full_size).entered();
+            while let Some(pointsize) = Self::next_u32(&mut graph_file) {
+                let mut neighs = vec![];
 
-            for _ in 0..pointsize {
-                neighs.push(
-                    Self::next_u32(&mut graph_file)
-                        .expect("Graph file declared more nodes than actually found")
-                        as usize,
-                );
+                for _ in 0..pointsize {
+                    neighs.push(
+                        Self::next_u32(&mut graph_file)
+                            .expect("Graph file declared more nodes than actually found")
+                            as usize,
+                    );
+                }
+
+                let associated_payload = Self::next_payload(&mut payload_file, payload_dim)
+                    .expect("Error while parsing payloads");
+
+                adjacency.push(Node {
+                    neighbors: FlatFixedSet::new(neighs),
+                    payload: associated_payload.into_boxed_slice(),
+                });
             }
-
-            let associated_payload = Self::next_payload(&mut payload_file, payload_dim)
-                .expect("Error while parsing payloads");
-
-            adjacency.push(Node {
-                neighbors: FlatFixedSet::new(neighs),
-                payload: associated_payload.into_boxed_slice(),
-            });
         }
 
         // we should have read all of the file contents by now.
@@ -205,13 +210,19 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
         // Determine plane_dim from the first node's payload
         let plane_dim = adjacency[0].payload.len() * SIMD_LANECOUNT;
 
-        let engine_params =
-            EngineStarterParams::new(num_hash, plane_dim, entry_point_id, seed, enabled_catapults);
+        let engine_params = EngineStarterParams::new(
+            num_hash,
+            bucket_cap,
+            plane_dim,
+            entry_point_id,
+            seed,
+            matches!(running_mode, SearchStrategy::Catapult),
+        );
 
         AdjacencyGraph::new_flat(
             adjacency,
             EngineStarter::<T>::new(engine_params),
-            FlatCatapultChoice::from_bool(enabled_catapults),
+            running_mode,
         )
     }
 }
@@ -219,33 +230,48 @@ impl<T: CatapultEvictingStructure> AdjacencyGraph<T, FlatSearch> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        search::{AdjacencyGraph, graph_algo::FlatSearch},
-        sets::catapults::FifoSet,
+        search::{
+            AdjacencyGraph,
+            SearchStrategy::{Catapult, LshApg, Vanilla},
+            hash_start::zorder_index::ZOrderIndex,
+        },
+        sets::catapults::LruSet,
     };
 
     #[test]
     fn loading_example_graph() {
-        let graph_path = "test_index/ann";
-        let payload_path = "test_index/ann_vectors.bin";
+        let graph_path = "test/index/ann";
+        let payload_path = "test/index/ann_vectors.bin";
 
-        let graphed1 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
+        let graphed1 = AdjacencyGraph::<LruSet>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
-            4,    // num_hash
-            42,   // seed
-            true, // enabled_catapults
+            4, // num_hash
+            40,
+            42,       // seed
+            Catapult, // enabled_catapults
         );
 
-        let graphed2 = AdjacencyGraph::<FifoSet<20>, FlatSearch>::load_flat_from_path(
+        let graphed2 = AdjacencyGraph::<LruSet>::load_flat_from_path(
             graph_path.into(),
             payload_path.into(),
-            4,     // num_hash
-            42,    // seed
-            false, // enabled_catapults
+            4, // num_hash
+            40,
+            42,      // seed
+            Vanilla, // enabled_catapults
+        );
+
+        let graphed3 = AdjacencyGraph::<LruSet>::load_flat_from_path(
+            graph_path.into(),
+            payload_path.into(),
+            4, // num_hash
+            40,
+            42, // seed
+            LshApg([ZOrderIndex::new(4, 16, 4, 1.0)]),
         );
 
         assert!(graphed1.len() == 4);
         assert!(graphed2.len() == 4);
-        assert!(graphed1.len() == graphed2.len());
+        assert_eq!(graphed3.len(), 4);
     }
 }

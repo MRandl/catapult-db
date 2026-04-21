@@ -1,15 +1,15 @@
 use std::sync::RwLock;
 
 use crate::search::NodeId;
-use crate::sets::catapults::CatapultEvictingStructure;
-use crate::{numerics::AlignedBlock, search::hash_start::hasher::SimilarityHasher};
+use crate::sets::catapults::CatapultEvictionPolicy;
+use crate::{numerics::AlignedBlock, search::hash_start::hyperplane_hasher::SimilarityHasher};
 
 /// Manages LSH-based catapult storage and starting point selection for graph searches.
 ///
 /// Uses locality-sensitive hashing to map query vectors to buckets of cached starting
 /// points (catapults) from previous successful searches. Each bucket is a thread-safe
 /// evicting structure that stores node indices discovered by similar queries.
-pub struct EngineStarter<T: CatapultEvictingStructure> {
+pub struct EngineStarter<T: CatapultEvictionPolicy> {
     hasher: SimilarityHasher,
     starting_node: NodeId,
     catapults: Box<[RwLock<T>]>,
@@ -33,6 +33,9 @@ pub struct StartingPoints {
 pub struct EngineStarterParams {
     /// Number of LSH hash bits (determines 2^num_hash buckets)
     pub num_hash: usize,
+
+    /// Capacity of each bucket in the LSH table
+    pub bucket_capacity: usize,
 
     /// Dimension of input vectors in f32 elements
     pub plane_dim: usize,
@@ -61,6 +64,7 @@ impl EngineStarterParams {
     /// A new `EngineStarterParams` instance
     pub fn new(
         num_hash: usize,
+        bucket_capacity: usize,
         plane_dim: usize,
         starting_node: NodeId,
         seed: u64,
@@ -68,6 +72,7 @@ impl EngineStarterParams {
     ) -> Self {
         Self {
             num_hash,
+            bucket_capacity,
             plane_dim,
             starting_node,
             seed,
@@ -78,7 +83,7 @@ impl EngineStarterParams {
 
 impl<T> EngineStarter<T>
 where
-    T: CatapultEvictingStructure,
+    T: CatapultEvictionPolicy,
 {
     /// Creates a new `EngineStarter` with the specified parameters.
     ///
@@ -102,7 +107,7 @@ where
         let amount_of_catapult_sets = 1 << num_hash;
         let mut catapult_vecs = Vec::with_capacity(amount_of_catapult_sets);
         for _ in 0..amount_of_catapult_sets {
-            catapult_vecs.push(RwLock::new(T::new()));
+            catapult_vecs.push(RwLock::new(T::new(params.bucket_capacity)));
         }
 
         Self {
@@ -159,16 +164,21 @@ where
             catapult_set.write().unwrap().clear();
         }
     }
+
+    pub fn starting_node(&self) -> NodeId {
+        self.starting_node
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{numerics::SIMD_LANECOUNT, sets::catapults::FifoSet};
+    use crate::{numerics::SIMD_LANECOUNT, sets::catapults::LruSet};
 
-    type TestEngineStarter = EngineStarter<FifoSet<30>>;
+    type TestEngineStarter = EngineStarter<LruSet>;
 
     const DEFAULT_NUM_HASH: usize = 8;
+    const DEFAULT_BUCKET_CAP: usize = 40;
     const DEFAULT_STARTING_NODE: usize = 1000;
     const DEFAULT_SEED: u64 = 42;
 
@@ -176,6 +186,7 @@ mod tests {
     fn default_params() -> EngineStarterParams {
         EngineStarterParams::new(
             DEFAULT_NUM_HASH,
+            DEFAULT_BUCKET_CAP,
             SIMD_LANECOUNT,
             NodeId {
                 internal: DEFAULT_STARTING_NODE,
@@ -189,6 +200,7 @@ mod tests {
     fn params_with_seed(seed: u64) -> EngineStarterParams {
         EngineStarterParams::new(
             DEFAULT_NUM_HASH,
+            DEFAULT_BUCKET_CAP,
             SIMD_LANECOUNT,
             NodeId {
                 internal: DEFAULT_STARTING_NODE,
@@ -202,6 +214,7 @@ mod tests {
     fn params_with_dims(plane_dim: usize) -> EngineStarterParams {
         EngineStarterParams::new(
             DEFAULT_NUM_HASH,
+            DEFAULT_BUCKET_CAP,
             plane_dim,
             NodeId {
                 internal: DEFAULT_STARTING_NODE,
@@ -310,6 +323,7 @@ mod tests {
         assert_eq!(result1.signature, result2.signature);
         assert_eq!(result1.catapults, result2.catapults);
         assert_eq!(result1.starting_node, result2.starting_node);
+        assert_eq!(result1.starting_node, starter.starting_node());
     }
 
     #[test]
@@ -437,14 +451,14 @@ mod tests {
         let signature = get_signature_for_query(&starter, &query);
 
         // Insert more than FifoSet capacity (30 items)
-        for i in 0..35 {
+        for i in 0..45 {
             starter.new_catapult(signature, NodeId { internal: i });
         }
 
         let result = starter.select_starting_points(&query);
 
         // Should have at most 30 catapults
-        assert!(result.catapults.len() <= 30);
+        assert!(result.catapults.len() <= 40);
         assert_contains_starting_node(&result);
 
         // Oldest entries should be evicted (0-4 should be gone)
@@ -453,7 +467,7 @@ mod tests {
         }
 
         // Newest entries should be present (30-34)
-        for i in 30..35 {
+        for i in 40..45 {
             assert!(contains_node(&result, NodeId { internal: i }));
         }
     }
@@ -463,6 +477,7 @@ mod tests {
         let custom_starting = 999;
         let params = EngineStarterParams::new(
             DEFAULT_NUM_HASH,
+            DEFAULT_BUCKET_CAP,
             SIMD_LANECOUNT,
             NodeId {
                 internal: custom_starting,

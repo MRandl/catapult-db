@@ -2,18 +2,6 @@ use std::fmt::Debug;
 
 use crate::search::NodeId;
 
-/// A trait for immutable neighbor sets in flat proximity graphs.
-///
-/// This abstraction provides a uniform interface for accessing neighbor relationships
-/// in graph nodes.
-pub trait FixedSet: Debug {
-    /// Returns a cloned copy of the neighbor indices.
-    ///
-    /// # Returns
-    /// A boxed slice containing the neighbor node indices
-    fn to_slice(&self) -> Box<[NodeId]>;
-}
-
 /// An immutable set of neighbor indices for a flat proximity graph node.
 ///
 /// Stores a single fixed list of neighbor indices that does not vary by level.
@@ -40,10 +28,8 @@ impl FlatFixedSet {
                 .collect(),
         }
     }
-}
 
-impl FixedSet for FlatFixedSet {
-    fn to_slice(&self) -> Box<[NodeId]> {
+    pub fn to_slice(&self) -> Box<[NodeId]> {
         self.neighbors.clone()
     }
 }

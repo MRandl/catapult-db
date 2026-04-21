@@ -7,8 +7,13 @@ edition = "2024"
 path = "src/lib.rs"
 
 [[bin]]
-name = "catapult"
-path = "src/main.rs"
+name = "run_queries"
+path = "src/bin/run_queries.rs"
+test = false
+
+[[bin]]
+name = "adv_edges"
+path = "src/bin/adv_edges.rs"
 test = false
 
 [profile.release]
@@ -37,3 +42,7 @@ rand = "0.9.2"
 rand_distr = "0.5.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.149"}
+tqdm = "0.8.0"
+tracing = "0.1.44"
+tracing-flame = "0.2"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }

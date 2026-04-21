@@ -5,7 +5,7 @@ use crate::search::NodeId;
 /// Catapult structures maintain a bounded set of node indices that serve as cached
 /// starting points for graph searches. When capacity is reached, implementations
 /// must evict entries according to their specific policy (e.g., FIFO, LRU).
-pub trait CatapultEvictingStructure {
+pub trait CatapultEvictionPolicy {
     /// Inserts a node index into the catapult structure.
     ///
     /// If the structure is at capacity, the implementation's eviction policy determines
@@ -20,7 +20,7 @@ pub trait CatapultEvictingStructure {
     ///
     /// # Returns
     /// A new empty instance of the implementing type
-    fn new() -> Self;
+    fn new(max_cap: usize) -> Self;
 
     /// Returns all currently stored catapult node indices as a vector.
     ///

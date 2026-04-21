@@ -4,5 +4,8 @@
 //! search performance, including number of searches, nodes visited, distances computed,
 //! and catapult usage.
 
+mod adversarial;
 mod stats;
+
+pub use adversarial::*;
 pub use stats::*;
