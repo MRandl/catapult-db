@@ -334,7 +334,7 @@ mod tests {
     use crate::{
         numerics::SIMD_LANECOUNT,
         search::{
-            LshApgArgs, SearchStrategy,
+            SearchStrategy,
             hash_start::{EngineStarter, EngineStarterParams, zorder_index::ZOrderIndex},
         },
         sets::{catapults::LruSet, fixed::FlatFixedSet},
