@@ -157,7 +157,7 @@ impl<T: CatapultEvictionPolicy> AdjacencyGraph<T> {
         num_hash: usize,
         bucket_cap: usize,
         seed: u64,
-        running_mode: SearchStrategy,
+        mut running_mode: SearchStrategy,
     ) -> Self {
         let mut graph_file = BufReader::new(File::open(graph_path).expect("FNF")).bytes();
         let mut payload_file = BufReader::new(File::open(payload_path).expect("FNF")).bytes();
@@ -206,6 +206,19 @@ impl<T: CatapultEvictionPolicy> AdjacencyGraph<T> {
         let entry_point_id = NodeId {
             internal: entry_point as usize,
         };
+
+        // REPRO: populate the LSH-APG index with every base vector. The shipped
+        // `main` (commit ca1f7d1) never does this, so lshapg silently runs as
+        // vanilla. Inserting the base vectors restores the intended behaviour:
+        // entry points are chosen by LLCP over the Z-order/p-stable signatures.
+        if let SearchStrategy::LshApg(indices) = &mut running_mode {
+            let _span = info_span!("populate_lshapg_index", n = adjacency.len()).entered();
+            for (i, node) in adjacency.iter().enumerate() {
+                for idx in indices.iter_mut() {
+                    idx.insert(&node.payload, NodeId { internal: i });
+                }
+            }
+        }
 
         // Determine plane_dim from the first node's payload
         let plane_dim = adjacency[0].payload.len() * SIMD_LANECOUNT;
