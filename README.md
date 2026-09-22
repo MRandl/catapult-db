@@ -5,6 +5,7 @@ It is based on a proximity graph data structure that enables fast nearest neighb
 We improve by quite a long shot over the current SoTA by inserting edges that 'remember' past trajectories in the 
 graph data structure. These special history-based edges are nicknamed 'catapults'.
 
+Read our paper [here](https://arxiv.org/abs/2603.02164).
 ## Requirements
 
 - Rust nightly (uses `#![feature(portable_simd)]`)
